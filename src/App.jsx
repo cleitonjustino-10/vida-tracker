@@ -26,7 +26,7 @@ const LVLN=["Iniciante","Comprometido","Consistente","Disciplinado","Focado","In
 const getLvl=(xp)=>{for(let i=XPL.length-1;i>=0;i--)if(xp>=XPL[i])return i;return 0;};
 const bmrCalc=(p,a,i,s)=>s==="M"?(10*p)+(6.25*a)-(5*i)+5:(10*p)+(6.25*a)-(5*i)-161;
 
-const C={bg:"#0a0a0f",surface:"#12121a",card:"#1a1a26",border:"rgba(255,255,255,0.07)",muted:"rgba(255,255,255,0.45)",dim:"rgba(255,255,255,0.22)",yellow:"#facc15",green:"#4ade80",blue:"#60a5fa",purple:"#a78bfa",orange:"#fb923c",red:"#f87171"};
+const C={bg:"#0f172a",surface:"#1e293b",card:"#1e293b",border:"rgba(255,255,255,0.06)",muted:"rgba(255,255,255,0.5)",dim:"rgba(255,255,255,0.25)",yellow:"#fbbf24",green:"#34d399",blue:"#60a5fa",purple:"#a78bfa",orange:"#fb923c",red:"#f87171"};
 
 const MODALITIES=[
   {id:"musculacao",label:"Musculação",emoji:"🏋️",color:"#a78bfa",xp:30},
@@ -84,7 +84,7 @@ const MAIS_ITEMS=[
 ];
 
 // UI Components
-const Card=({children,style,onClick})=><div onClick={onClick} style={{background:C.card,border:`1px solid ${C.border}`,borderRadius:18,padding:16,transition:"all .2s",...(style||{})}}>{children}</div>;
+const Card=({children,style,onClick})=><div onClick={onClick} style={{background:C.card,borderRadius:18,padding:16,transition:"all .2s",boxShadow:"0 1px 3px rgba(0,0,0,.4)",...(style||{})}}>{children}</div>;
 const Badge=({children,color,style})=>{const c=color||C.yellow;return<span style={{fontSize:9,fontWeight:800,letterSpacing:".12em",textTransform:"uppercase",padding:"3px 9px",borderRadius:20,color:c,background:`${c}20`,border:`1px solid ${c}30`,whiteSpace:"nowrap",...(style||{})}}>{children}</span>;};
 const SLbl=({children,mt})=><p style={{fontSize:10,letterSpacing:".18em",textTransform:"uppercase",color:C.dim,marginBottom:12,marginTop:mt||0,fontWeight:700}}>{children}</p>;
 const Spin=({text})=>(
@@ -117,7 +117,7 @@ const Sheet=({children,onClose,title,subtitle})=>(
         {title&&<h3 style={{fontFamily:"'Clash Display',sans-serif",fontSize:20,fontWeight:700,marginBottom:subtitle?4:16}}>{title}</h3>}
         {subtitle&&<p style={{fontSize:12,color:C.muted,marginBottom:16,lineHeight:1.5}}>{subtitle}</p>}
       </div>
-      <div style={{overflowY:"auto",padding:"0 22px 24px",flex:1,WebkitOverflowScrolling:"touch"}}>{children}
+      <div style={{overflowY:"auto",padding:"0 22px",paddingBottom:"max(32px, env(safe-area-inset-bottom, 32px))",flex:1,WebkitOverflowScrolling:"touch"}}>{children}
         <div style={{height:"max(env(safe-area-inset-bottom,0px),24px)"}}/>
       </div>
     </div>
@@ -1097,7 +1097,7 @@ export default function App(){
   const remHabit=async(id)=>{try{await DB.del("habitos",`?id=eq.${id}`);setHabits(h=>h.filter(x=>x.id!==id));}catch(e){console.error(e);}};
 
   if(loading)return(
-    <div style={{minHeight:"100vh",background:C.bg,display:"flex",alignItems:"center",justifyContent:"center",flexDirection:"column",gap:16,fontFamily:"'Plus Jakarta Sans',sans-serif"}}>
+    <div style={{minHeight:"100vh",background:"#0f172a",display:"flex",alignItems:"center",justifyContent:"center",flexDirection:"column",gap:16,fontFamily:"'Plus Jakarta Sans',sans-serif"}}>
       <style>{`@import url('https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;600;700;800&display=swap');`}</style>
       <div style={{fontSize:44}}>🏆</div><Spin text="Carregando sua jornada"/>
     </div>
@@ -1128,7 +1128,7 @@ export default function App(){
         ::-webkit-scrollbar{width:2px;}::-webkit-scrollbar-thumb{background:rgba(255,255,255,.1);border-radius:2px;}
         button:active{transform:scale(.97);}
       `}</style>
-      <div style={{position:"relative",zIndex:1}}>{pages[tab]||pages.home}</div>
+      <div>{pages[tab]||pages.home}</div>
       {showCheckin&&<CheckinSemanal profile={profile} weights={weights} meals={meals} onClose={()=>setShowCheckin(false)}/>}
       {showMais&&(
         <Sheet title="Menu" onClose={()=>setShowMais(false)}>
@@ -1153,7 +1153,7 @@ export default function App(){
         )}
         <button onClick={()=>setShowQuick(q=>!q)} style={{width:52,height:52,borderRadius:"50%",background:C.yellow,border:"none",fontSize:26,cursor:"pointer",color:"#000",fontWeight:900,boxShadow:"0 4px 20px rgba(250,204,21,.45)",display:"flex",alignItems:"center",justifyContent:"center",transition:"transform .2s",transform:showQuick?"rotate(45deg)":"none"}}>+</button>
       </div>
-      <div style={{position:"fixed",bottom:0,left:"50%",transform:"translateX(-50%)",width:"100%",maxWidth:520,background:"rgba(10,10,15,.97)",backdropFilter:"blur(24px)",borderTop:`1px solid ${C.border}`,zIndex:100}}>
+      <div style={{position:"fixed",bottom:0,left:"50%",transform:"translateX(-50%)",width:"100%",maxWidth:520,background:"rgba(15,23,42,.97)",backdropFilter:"blur(24px)",borderTop:"1px solid rgba(255,255,255,0.05)",zIndex:100}}>
         <div style={{display:"flex",padding:`8px 2px max(20px,env(safe-area-inset-bottom,20px))`}}>
           {TABS.map(t=>{
             const isMais=t.id==="mais";
