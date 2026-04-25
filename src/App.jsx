@@ -14,7 +14,7 @@ async function callAI(msgs,sys="",max=1000){
 }
 async function callVision(b64,mime,prompt){
   const r=await fetch("https://api.anthropic.com/v1/messages",{method:"POST",headers:{"Content-Type":"application/json","x-api-key":getAK(),"anthropic-version":"2023-06-01","anthropic-dangerous-direct-browser-access":"true"},body:JSON.stringify({model:"claude-sonnet-4-6",max_tokens:1500,system:"Retorne APENAS JSON válido sem markdown.",messages:[{role:"user",content:[{type:"image",source:{type:"base64",media_type:mime,data:b64}},{type:"text",text:prompt}]}]})});
-  const d=await r.json();const txt=d.content?.map(b=>b.text||"").join("")||"{}";
+  const d=await r.json();if(d.error)throw new Error(d.error.message);const txt=d.content?.map(b=>b.text||"").join("")||"{}";
   try{return JSON.parse(txt.replace(/```json|```/g,"").trim());}catch{return null;}
 }
 
@@ -563,7 +563,7 @@ function Nutrition({profile,meals,onAdd,onDelete}){
   );
 
   const MealCard=({m})=>{
-    const mt=MEAL_TYPES.find(t=>t.id===m.tipo_refeicao);
+    const mt=MEAL_TYPES.find(t=>t.id===(m.tipo||m.tipo_refeicao));
     return(
       <Card style={{marginBottom:8,display:"flex",gap:12,alignItems:"center"}}>
         {m.foto?<img src={m.foto} alt="" style={{width:50,height:50,borderRadius:11,objectFit:"cover",flexShrink:0}}/>:
@@ -599,8 +599,8 @@ function Nutrition({profile,meals,onAdd,onDelete}){
           </Card>
           {dayMeals.length>0&&(
             <div style={{display:"flex",gap:6,flexWrap:"wrap",marginBottom:14}}>
-              {MEAL_TYPES.filter(t=>dayMeals.some(m=>m.tipo_refeicao===t.id)).map(t=>{
-                const count=dayMeals.filter(m=>m.tipo_refeicao===t.id).length;
+              {MEAL_TYPES.filter(t=>dayMeals.some(m=>(m.tipo||m.tipo_refeicao)===t.id)).map(t=>{
+                const count=dayMeals.filter(m=>(m.tipo||m.tipo_refeicao)===t.id).length;
                 return<span key={t.id} style={{background:`${t.color}20`,borderRadius:20,padding:"5px 10px",fontSize:11,color:t.color}}>{t.label.slice(0,2)} {count}</span>;
               })}
             </div>
@@ -608,7 +608,7 @@ function Nutrition({profile,meals,onAdd,onDelete}){
           <FIn label="Ver outro dia" type="date" value={selDate} onChange={v=>{setSelDate(v);setMealDate(v);}}/>
           <SLbl mt={4}>Refeições — {fmt(selDate)}</SLbl>
           {dayMeals.length===0?<div style={{textAlign:"center",padding:"24px 0",color:C.dim}}><p style={{fontSize:28,marginBottom:8}}>🍽️</p><p style={{fontSize:13}}>Nenhuma refeição neste dia</p><p style={{fontSize:11,marginTop:4}}>Use "TACO 🇧🇷" ou "Foto IA"</p></div>:
-            MEAL_TYPES.map(t=>{const group=dayMeals.filter(m=>m.tipo_refeicao===t.id);if(!group.length)return null;return(<div key={t.id}><p style={{fontSize:10,letterSpacing:".15em",textTransform:"uppercase",color:t.color,marginTop:16,marginBottom:8,fontWeight:700}}>{t.label}{t.horario?` · ${t.horario}`:""}</p>{group.map(m=><MealCard key={m.id} m={m}/>)}</div>);})
+            MEAL_TYPES.map(t=>{const group=dayMeals.filter(m=>(m.tipo||m.tipo_refeicao)===t.id);if(!group.length)return null;return(<div key={t.id}><p style={{fontSize:10,letterSpacing:".15em",textTransform:"uppercase",color:t.color,marginTop:16,marginBottom:8,fontWeight:700}}>{t.label}{t.horario?` · ${t.horario}`:""}</p>{group.map(m=><MealCard key={m.id} m={m}/>)}</div>);})
           }
         </>
       )}
@@ -760,7 +760,8 @@ function Health({profile,weights,compositions,onAddWeight,onAddComp,onDeleteWeig
       try{
         const zp="Extraia valores do app Zepp Life. JSON com campos: peso, gordura_pct, musculo_kg, agua_pct, proteina_pct, gordura_visceral, metabolismo_basal, massa_ossea. Valores numeros, null se nao visivel.";const r=await callVision(b64,file.type,zp);
         if(r){setXi({peso:r.peso?.toString()||"",gordura_pct:r.gordura_pct?.toString()||"",musculo_kg:r.musculo_kg?.toString()||"",agua_pct:r.agua_pct?.toString()||"",proteina_pct:r.proteina_pct?.toString()||"",gordura_visceral:r.gordura_visceral?.toString()||"",metabolismo_basal:r.metabolismo_basal?.toString()||"",massa_ossea:r.massa_ossea?.toString()||""});setShowX(true);}
-      }catch{}
+        else{alert("IA não conseguiu extrair dados. Tente outra foto ou preencha manualmente.");}
+      }catch(e){alert("Erro ao analisar foto Zepp: "+e.message);}
       setLoadXi(false);
     };
     reader.readAsDataURL(file);
@@ -791,8 +792,9 @@ function Health({profile,weights,compositions,onAddWeight,onAddComp,onDeleteWeig
         }else{
           r=await callVision(b64,file.type,ep);
         }
-        setExRes(r);
-      }catch{setExRes(null);}
+        if(r)setExRes(r);
+        else alert("IA retornou resposta inválida. Tente novamente.");
+      }catch(e){setExRes(null);alert("Erro ao analisar exame: "+e.message);}
       setLoadEx(false);
     };
     reader.readAsDataURL(file);
@@ -1392,7 +1394,7 @@ export default function App(){
   const delTraining=async(id)=>{try{await DB.del("treinos",`?id=eq.${id}`);setTrainings(t=>t.filter(x=>x.id!==id));}catch(e){console.error(e);}};
   const addWeight=async(data)=>{try{const [s]=await DB.post("pesos",data);setWeights(w=>[s,...w]);}catch(e){console.error(e);}};
   const delWeight=async(id)=>{try{await DB.del("pesos",`?id=eq.${id}`);setWeights(w=>w.filter(x=>x.id!==id));}catch(e){console.error(e);}};
-  const addComp=async(data)=>{try{const [s]=await DB.post("composicao_corporal",data);setCompositions(c=>[s,...c]);}catch(e){console.error(e);}};
+  const addComp=async(data)=>{try{const [s]=await DB.post("composicao_corporal",data);setCompositions(c=>[s,...c]);}catch(e){console.error(e);alert("Erro ao salvar composição: "+e.message);}};
   const toggleCI=async(habit)=>{
     const tk=todayStr(),ex=checkins.find(c=>c.habito_id===habit.id&&c.data===tk);
     try{
