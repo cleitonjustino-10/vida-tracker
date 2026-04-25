@@ -133,16 +133,17 @@ const Tabs2=({tabs,active,onChange})=>(
 function Onboarding({onSave}){
   const [step,setStep]=useState(0);
   const [saving,setSaving]=useState(false);
-  const [f,setF]=useState({nome:"",sexo:"M",idade:"",peso:"",altura:"",peso_meta:""});
+  const [f,setF]=useState({nome:"",sexo:"M",idade:"",peso:"",altura:"",peso_meta:"",limitacoes:"",medicamentos:"",experiencia:"",objetivo:""});
   const set=(k,v)=>setF(p=>({...p,[k]:v}));
-  const steps=[{title:"Bem-vindo, atleta! 👊",sub:"Sua jornada rumo ao Ultraman começa aqui.",ok:f.nome.trim().length>0},{title:"Dados físicos 📏",sub:"Para calcular suas metas com precisão.",ok:f.peso&&f.idade&&f.altura},{title:"Sua meta 🎯",sub:"Onde você quer chegar?",ok:f.peso_meta}];
+  const steps=[{title:"Bem-vindo, atleta! 👊",sub:"Sua jornada rumo ao Ultraman começa aqui.",ok:f.nome.trim().length>0},{title:"Dados físicos 📏",sub:"Para calcular suas metas com precisão.",ok:f.peso&&f.idade&&f.altura},{title:"Sua meta 🎯",sub:"Onde você quer chegar?",ok:!!f.peso_meta},{title:"Saúde & histórico 🩺",sub:"Quanto mais você compartilha, melhor o app te conhece.",ok:true}];
   const cur=steps[step];
+  const isLast=step===3;
   const finish=async()=>{
     setSaving(true);
     try{
       const p=parseFloat(f.peso),a=parseFloat(f.altura),i=parseFloat(f.idade);
       const bmr=bmrCalc(p,a,i,f.sexo),tdee=Math.round(bmr*1.55),cal=tdee-500;
-      const profile={nome:f.nome,sexo:f.sexo,idade:i,peso:p,altura:a,peso_meta:parseFloat(f.peso_meta),bmr:Math.round(bmr),tdee,cal_meta:cal,prot_meta:Math.round(p*2.4),carbs_meta:Math.round((cal*.35)/4),gord_meta:Math.round((cal*.25)/9),xp:0,data_criacao:todayStr()};
+      const profile={nome:f.nome,sexo:f.sexo,idade:i,peso:p,altura:a,peso_meta:parseFloat(f.peso_meta),bmr:Math.round(bmr),tdee,cal_meta:cal,prot_meta:Math.round(p*2.4),carbs_meta:Math.round((cal*.35)/4),gord_meta:Math.round((cal*.25)/9),xp:0,data_criacao:todayStr(),limitacoes:f.limitacoes||"",medicamentos:f.medicamentos||"",experiencia:f.experiencia||"Intermediário",objetivo:f.objetivo||"Emagrecer"};
       const [saved]=await DB.post("perfil",profile);
       for(const h of DEFAULT_HABITS) await DB.post("habitos",h);
       onSave(saved);
@@ -152,16 +153,24 @@ function Onboarding({onSave}){
     <div style={{minHeight:"100vh",background:C.bg,color:"#fff",fontFamily:"inherit",display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center",padding:"32px 24px"}}>
       <div style={{width:"100%",maxWidth:380}}>
         <div style={{display:"flex",gap:6,marginBottom:36}}>{steps.map((_,i)=><div key={i} style={{height:3,flex:1,borderRadius:2,background:i<=step?C.yellow:"rgba(255,255,255,.1)",transition:"background .3s"}}/>)}</div>
-        <Badge style={{marginBottom:16}}>Etapa {step+1}/3</Badge>
+        <Badge style={{marginBottom:16}}>Etapa {step+1}/4</Badge>
         <h2 style={{fontFamily:"'Clash Display',sans-serif",fontSize:30,fontWeight:700,marginBottom:8,marginTop:10}}>{cur.title}</h2>
         <p style={{fontSize:13,color:C.muted,marginBottom:28,lineHeight:1.65}}>{cur.sub}</p>
         {step===0&&<><FIn label="Seu nome" req value={f.nome} onChange={v=>set("nome",v)} placeholder="Ex: Cleiton"/><div style={{marginBottom:14}}><p style={{fontSize:10,letterSpacing:".16em",textTransform:"uppercase",color:C.dim,marginBottom:10,fontWeight:700}}>Sexo biológico</p><div style={{display:"flex",gap:8}}>{[{v:"M",l:"Masculino"},{v:"F",l:"Feminino"}].map(s=><button key={s.v} onClick={()=>set("sexo",s.v)} style={{flex:1,padding:13,borderRadius:12,border:f.sexo===s.v?`2px solid ${C.yellow}`:"1.5px solid rgba(255,255,255,.1)",background:f.sexo===s.v?"rgba(250,204,21,.12)":"transparent",color:f.sexo===s.v?C.yellow:C.muted,fontSize:13,fontWeight:700,cursor:"pointer",fontFamily:"inherit"}}>{s.l}</button>)}</div></div></>}
         {step===1&&<><FIn label="Idade" type="number" req value={f.idade} onChange={v=>set("idade",v)} placeholder="Ex: 32"/><FIn label="Peso atual (kg)" type="number" req value={f.peso} onChange={v=>set("peso",v)} placeholder="Ex: 139.8"/><FIn label="Altura (cm)" type="number" req value={f.altura} onChange={v=>set("altura",v)} placeholder="Ex: 192"/></>}
         {step===2&&<><FIn label="Peso meta (kg)" type="number" req value={f.peso_meta} onChange={v=>set("peso_meta",v)} placeholder="Ex: 100"/><div style={{background:"rgba(250,204,21,.06)",border:"1px solid rgba(250,204,21,.18)",borderRadius:14,padding:"14px 16px",marginTop:4}}><p style={{fontSize:12,color:"rgba(255,255,255,.6)",lineHeight:1.7}}>Meta <strong style={{color:C.yellow}}>Ultraman</strong>: 10km natação + 421km bike + 84km corrida. 🏆</p></div></>}
+        {step===3&&(
+          <>
+            <div style={{marginBottom:14}}><p style={{fontSize:10,letterSpacing:".16em",textTransform:"uppercase",color:C.dim,marginBottom:7,fontWeight:700}}>Limitações físicas ou lesões</p><textarea value={f.limitacoes||""} onChange={e=>set("limitacoes",e.target.value)} placeholder="Ex: síndrome compartimental na canela, dor no joelho esquerdo..." rows={3} style={{width:"100%",background:"rgba(255,255,255,.05)",border:"1.5px solid rgba(255,255,255,.1)",borderRadius:12,padding:"13px 16px",color:"#fff",fontSize:13,outline:"none",fontFamily:"inherit",resize:"none"}}/></div>
+            <FIn label="Medicamentos em uso" value={f.medicamentos||""} onChange={v=>set("medicamentos",v)} placeholder="Ex: Wegovy 2.4mg semanal, Vitamina D..."/>
+            <div style={{marginBottom:14}}><p style={{fontSize:10,letterSpacing:".16em",textTransform:"uppercase",color:C.dim,marginBottom:10,fontWeight:700}}>Experiência com treino</p><div style={{display:"flex",gap:8}}>{["Iniciante","Intermediário","Avançado"].map(exp=><button key={exp} onClick={()=>set("experiencia",exp)} style={{flex:1,padding:"11px 6px",borderRadius:12,border:f.experiencia===exp?`2px solid ${C.yellow}`:"1.5px solid rgba(255,255,255,.1)",background:f.experiencia===exp?"rgba(250,204,21,.12)":"transparent",color:f.experiencia===exp?C.yellow:C.muted,fontSize:12,fontWeight:700,cursor:"pointer",fontFamily:"inherit"}}>{exp}</button>)}</div></div>
+            <div style={{marginBottom:14}}><p style={{fontSize:10,letterSpacing:".16em",textTransform:"uppercase",color:C.dim,marginBottom:10,fontWeight:700}}>Objetivo principal</p><div style={{display:"flex",flexWrap:"wrap",gap:8}}>{["Emagrecer","Ganhar músculo","Melhorar condicionamento","Preparar para Ultraman","Saúde geral"].map(obj=><button key={obj} onClick={()=>set("objetivo",obj)} style={{padding:"8px 14px",borderRadius:20,border:f.objetivo===obj?`1.5px solid ${C.yellow}`:"1.5px solid rgba(255,255,255,.1)",background:f.objetivo===obj?"rgba(250,204,21,.12)":"transparent",color:f.objetivo===obj?C.yellow:C.muted,fontSize:12,fontWeight:f.objetivo===obj?700:400,cursor:"pointer",fontFamily:"inherit"}}>{obj}</button>)}</div></div>
+          </>
+        )}
         {saving?<Spin text="Configurando"/>:(
           <div style={{display:"flex",gap:8,marginTop:8}}>
             {step>0&&<Btn onClick={()=>setStep(s=>s-1)} variant="ghost">← Voltar</Btn>}
-            <Btn onClick={step<2?()=>cur.ok&&setStep(s=>s+1):finish} disabled={!cur.ok} full={step===0}>{step<2?"Próximo →":"Começar 🚀"}</Btn>
+            <Btn onClick={isLast?finish:()=>cur.ok&&setStep(s=>s+1)} disabled={!cur.ok} full={step===0}>{isLast?"Começar 🚀":"Próximo →"}</Btn>
           </div>
         )}
       </div>
@@ -174,6 +183,7 @@ function Dashboard({profile,meals,weights,checkins,habits,trainings,onTab}){
   const [insight,setInsight]=useState("");
   const [plateauAnalysis,setPlateauAnalysis]=useState("");
   const [loadingPlateau,setLoadingPlateau]=useState(false);
+  const [aguaCopos,setAguaCopos]=useState(()=>{const s=localStorage.getItem("agua_"+todayStr());return s?parseInt(s):0;});
   const tk=todayStr(),tm=meals.filter(m=>m.data===tk);
   const cal=tm.reduce((s,m)=>s+(m.calorias||0),0),prot=tm.reduce((s,m)=>s+(m.proteina||0),0);
   const ctd=checkins.filter(c=>c.data===tk);
@@ -196,6 +206,9 @@ function Dashboard({profile,meals,weights,checkins,habits,trainings,onTab}){
   const hour=new Date().getHours();
   const showProtAlert=prot<(profile.prot_meta*0.7)&&hour>=14;
   const protRestante=(profile.prot_meta||0)-prot;
+  const blocosAgua=[{label:"Manhã",horario:"06–12h",meta:4,emoji:"🌅"},{label:"Tarde",horario:"12–17h",meta:5,emoji:"☀️"},{label:"Pré-treino",horario:"17–19h",meta:4,emoji:"🏋️"},{label:"Noite",horario:"19–23h",meta:3,emoji:"🌙"}];
+  const addCopo=()=>{const n=Math.min(aguaCopos+1,16);setAguaCopos(n);localStorage.setItem("agua_"+todayStr(),n);};
+  const removeCopo=()=>{const n=Math.max(aguaCopos-1,0);setAguaCopos(n);localStorage.setItem("agua_"+todayStr(),n);};
   const analyzePlateau=async()=>{
     setLoadingPlateau(true);
     const d7=new Date();d7.setDate(d7.getDate()-7);
@@ -267,6 +280,27 @@ function Dashboard({profile,meals,weights,checkins,habits,trainings,onTab}){
           {week.map((d,i)=>{const pct=Math.min(1,d.cal/(profile.cal_meta||2800)),h=8+pct*46;return(<div key={i} style={{flex:1,display:"flex",flexDirection:"column",alignItems:"center",gap:4}}>{d.tr&&<div style={{width:6,height:6,borderRadius:"50%",background:C.green,marginBottom:2}}/>}<div style={{width:"100%",height:h,borderRadius:4,background:d.cal>(profile.cal_meta||2800)?"rgba(248,113,113,.4)":d.today?C.yellow:"rgba(250,204,21,.22)",boxShadow:d.today?"0 0 8px rgba(250,204,21,.35)":"none"}}/><span style={{fontSize:8,color:d.today?C.yellow:C.dim}}>{d.dw}</span></div>);})}
         </div>
       </Card>
+      <Card style={{marginBottom:20}}>
+        <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:12}}>
+          <div><p style={{fontSize:13,fontWeight:700,marginBottom:2}}>💧 Hidratação</p><p style={{fontSize:11,color:C.muted}}>{aguaCopos} de 16 copos · {(aguaCopos*250/1000).toFixed(1)}L de 4L</p></div>
+          <div style={{display:"flex",gap:8,alignItems:"center"}}>
+            <button onClick={removeCopo} style={{width:32,height:32,borderRadius:"50%",border:"none",background:"rgba(255,255,255,0.07)",color:C.muted,fontSize:18,cursor:"pointer",fontFamily:"inherit"}}>−</button>
+            <span style={{fontFamily:"'Clash Display',sans-serif",fontSize:22,fontWeight:700,color:C.blue,minWidth:28,textAlign:"center"}}>{aguaCopos}</span>
+            <button onClick={addCopo} style={{width:32,height:32,borderRadius:"50%",border:"none",background:"rgba(96,165,250,0.2)",color:C.blue,fontSize:18,cursor:"pointer",fontFamily:"inherit"}}>+</button>
+          </div>
+        </div>
+        <Bar value={aguaCopos} max={16} color={C.blue} h={6}/>
+        <div style={{display:"grid",gridTemplateColumns:"1fr 1fr 1fr 1fr",gap:6,marginTop:14}}>
+          {blocosAgua.map((b,i)=>{const ant=blocosAgua.slice(0,i).reduce((s,x)=>s+x.meta,0),cur=Math.min(Math.max(0,aguaCopos-ant),b.meta),ok=cur>=b.meta;return(
+            <div key={i} style={{background:ok?"rgba(96,165,250,0.15)":"rgba(255,255,255,0.04)",border:ok?"1px solid rgba(96,165,250,0.3)":"1px solid rgba(255,255,255,0.07)",borderRadius:12,padding:"10px 8px",textAlign:"center"}}>
+              <p style={{fontSize:16,marginBottom:4}}>{b.emoji}</p>
+              <p style={{fontSize:9,color:ok?C.blue:C.dim,fontWeight:700,marginBottom:2}}>{b.label}</p>
+              <p style={{fontSize:9,color:C.dim}}>{b.horario}</p>
+              <p style={{fontSize:11,fontWeight:800,color:ok?C.blue:C.muted,marginTop:4}}>{cur}/{b.meta}</p>
+            </div>
+          );})}
+        </div>
+      </Card>
     </div>
   );
 }
@@ -284,6 +318,7 @@ function Training({profile,trainings,onAdd,onDelete}){
   const [loadP,setLoadP]=useState(false);
   const [filter,setFilter]=useState("all");
   const [date,setDate]=useState(todayStr());
+  const [rir,setRir]=useState("");
 
   const analyze=async()=>{
     setLoadA(true);
@@ -292,8 +327,8 @@ function Training({profile,trainings,onAdd,onDelete}){
     setLoadA(false);
   };
   const save=()=>{
-    onAdd({tipo:mod.label,modalidade:mod.id,duracao:parseInt(dur),fc:parseInt(hr)||0,notas:notes,analise:analysis,data:date,hora:fmtNow(),xp:mod.xp});
-    setShow(false);setDur("");setNotes("");setHr("");setAnalysis("");setDate(todayStr());
+    onAdd({tipo:mod.label,modalidade:mod.id,duracao:parseInt(dur),fc:parseInt(hr)||0,rir,notas:notes,analise:analysis,data:date,hora:fmtNow(),xp:mod.xp});
+    setShow(false);setDur("");setNotes("");setHr("");setAnalysis("");setDate(todayStr());setRir("");
   };
   const genPlan=async()=>{
     setLoadP(true);
@@ -338,6 +373,7 @@ function Training({profile,trainings,onAdd,onDelete}){
                       <p style={{fontSize:14,fontWeight:700}}>{t.tipo}</p>
                       <Badge color={m.color}>{t.duracao}min</Badge>
                       {t.fc>0&&<Badge color={C.red}>FC {t.fc}</Badge>}
+                      {t.rir&&<Badge color={C.orange}>RIR {t.rir}</Badge>}
                       {t.fonte==="apple_watch"&&<Badge color={C.blue}>⌚</Badge>}
                     </div>
                     <p style={{fontSize:11,color:C.muted}}>{fmt(t.data)}{t.hora?` · ${t.hora}`:""}</p>
@@ -366,9 +402,25 @@ function Training({profile,trainings,onAdd,onDelete}){
           <FIn label="Data" type="date" value={date} onChange={setDate}/>
           <FIn label="Duração (minutos)" type="number" req value={dur} onChange={setDur} placeholder="Ex: 60"/>
           <FIn label="FC média (bpm) — Apple Watch" type="number" value={hr} onChange={setHr} placeholder="Ex: 148"/>
+          <div style={{marginBottom:14}}>
+            <p style={{fontSize:10,letterSpacing:".16em",textTransform:"uppercase",color:C.dim,marginBottom:10,fontWeight:700}}>RIR — Repetições na reserva <span style={{color:C.dim,fontWeight:400,fontSize:9,marginLeft:6}}>(quantas reps sobraram no tanque)</span></p>
+            <div style={{display:"flex",gap:6}}>
+              {[{v:"0",l:"Falha"},{v:"1",l:"Quase"},{v:"2",l:"Difícil"},{v:"3",l:"Moderado"},{v:"4+",l:"Fácil"}].map(op=>(
+                <button key={op.v} onClick={()=>setRir(op.v)} style={{flex:1,padding:"10px 4px",borderRadius:12,border:rir===op.v?`2px solid ${C.yellow}`:"1.5px solid rgba(255,255,255,.1)",background:rir===op.v?"rgba(250,204,21,.12)":"transparent",color:rir===op.v?C.yellow:C.muted,fontSize:10,fontWeight:rir===op.v?800:400,cursor:"pointer",fontFamily:"inherit",textAlign:"center",lineHeight:1.4}}>
+                  <span style={{display:"block",fontSize:14,fontWeight:900}}>{op.v}</span>
+                  <span style={{fontSize:8}}>{op.l}</span>
+                </button>
+              ))}
+            </div>
+          </div>
           <FIn label="Notas" value={notes} onChange={setNotes} placeholder="Ex: Agachamento 4x10"/>
           {loadA&&<Spin text="Analisando"/>}
-          {analysis&&!loadA&&<div style={{background:"rgba(167,139,250,.1)",border:"1px solid rgba(167,139,250,.2)",borderRadius:14,padding:14,marginBottom:16}}><p style={{fontSize:9,letterSpacing:".15em",textTransform:"uppercase",color:C.purple,marginBottom:8,fontWeight:800}}>✦ Análise</p><p style={{fontSize:12,color:"rgba(255,255,255,.65)",lineHeight:1.7}}>{analysis}</p></div>}
+          {analysis&&!loadA&&<div style={{background:"rgba(250,204,21,.06)",border:"1px solid rgba(250,204,21,.15)",borderRadius:14,padding:14,marginBottom:16}}><p style={{fontSize:9,letterSpacing:".15em",textTransform:"uppercase",color:C.yellow,marginBottom:8,fontWeight:800}}>✦ Análise</p><p style={{fontSize:12,color:"rgba(255,255,255,.65)",lineHeight:1.7}}>{analysis}</p></div>}
+          {!analysis&&(
+            <button onClick={async()=>{const prompt=`Atleta fazendo ${mod.label}. Equipamento/situação: "${notes||"equipamentos padrão de academia"}". Sugira 3 exercícios substitutos para o mesmo grupo muscular com equipamento diferente. Formato: Exercício → Equipamento → Por que substitui bem.`;setAnalysis("Buscando substitutos...");try{const r=await callAI([{role:"user",content:prompt}],"Personal trainer especialista. Português direto.",300);setAnalysis(r);}catch{setAnalysis("Erro. Tente novamente.");}}} style={{width:"100%",border:"none",borderRadius:13,padding:"12px",fontSize:12,fontWeight:700,cursor:"pointer",fontFamily:"inherit",background:"rgba(96,165,250,.12)",color:C.blue,marginBottom:8}}>
+              🔄 Não tenho equipamento — sugerir substituto
+            </button>
+          )}
           <div style={{display:"flex",gap:8}}>
             {!analysis&&<Btn onClick={analyze} variant="ghost" disabled={!dur||loadA}>Analisar IA</Btn>}
             <Btn onClick={save} full disabled={!dur}>Salvar</Btn>
@@ -609,6 +661,10 @@ function Health({profile,weights,compositions,onAddWeight,onAddComp,onDeleteWeig
   const [sub,setSub]=useState("peso");
   const [showW,setShowW]=useState(false);
   const [showX,setShowX]=useState(false);
+  const [showMedidas,setShowMedidas]=useState(false);
+  const [medidas,setMedidas]=useState([]);
+  const [loadingMedidas,setLoadingMedidas]=useState(false);
+  const [novasMedidas,setNovasMedidas]=useState({});
   const [wVal,setWVal]=useState(String(weights[0]?.peso||profile?.peso||""));
   const [wDate,setWDate]=useState(todayStr());
   const [xi,setXi]=useState({peso:"",gordura_pct:"",musculo_kg:"",agua_pct:"",proteina_pct:"",gordura_visceral:"",metabolismo_basal:"",massa_ossea:""});
@@ -680,11 +736,19 @@ function Health({profile,weights,compositions,onAddWeight,onAddComp,onDeleteWeig
   };
 
   const sColor=(s)=>s==="ok"?C.green:s==="crítico"?C.red:C.orange;
+  const camposMedidas=[{k:"cintura",l:"Cintura (cm)",ref:"Meta: < 94cm"},{k:"quadril",l:"Quadril (cm)",ref:"Rel. cintura/quadril"},{k:"peito",l:"Peito (cm)",ref:""},{k:"braco_d",l:"Braço Dir. (cm)",ref:"Flexionado"},{k:"braco_e",l:"Braço Esq. (cm)",ref:"Flexionado"},{k:"coxa_d",l:"Coxa Dir. (cm)",ref:""},{k:"coxa_e",l:"Coxa Esq. (cm)",ref:""},{k:"pescoco",l:"Pescoço (cm)",ref:""}];
+  const salvarMedidas=async()=>{
+    setLoadingMedidas(true);
+    try{const data={...Object.fromEntries(Object.entries(novasMedidas).map(([k,v])=>[k,parseFloat(v)||null])),data:todayStr()};const [s]=await DB.post("medidas_corporais",data);setMedidas(m=>[s,...m]);setShowMedidas(false);setNovasMedidas({});}
+    catch(e){console.error(e);}
+    setLoadingMedidas(false);
+  };
+  useEffect(()=>{DB.get("medidas_corporais","?order=created_at.desc&limit=20").then(r=>setMedidas(r||[])).catch(()=>{});},[]);
 
   return(
     <div style={{padding:"22px 18px",paddingBottom:170}}>
-      <div style={{marginBottom:20}}><h2 style={{fontFamily:"'Clash Display',sans-serif",fontSize:26,fontWeight:700,marginBottom:4}}>Saúde 📊</h2><p style={{fontSize:12,color:C.muted}}>Peso · Composição · Exames</p></div>
-      <Tabs2 tabs={[{id:"peso",label:"Peso"},{id:"comp",label:"Xiaomi"},{id:"exames",label:"Exames"}]} active={sub} onChange={setSub}/>
+      <div style={{marginBottom:20}}><h2 style={{fontFamily:"'Clash Display',sans-serif",fontSize:26,fontWeight:700,marginBottom:4}}>Saúde 📊</h2><p style={{fontSize:12,color:C.muted}}>Peso · Composição · Exames · Medidas</p></div>
+      <Tabs2 tabs={[{id:"peso",label:"Peso"},{id:"comp",label:"Xiaomi"},{id:"exames",label:"Exames"},{id:"medidas",label:"Medidas"}]} active={sub} onChange={setSub}/>
 
       {sub==="peso"&&(
         <>
@@ -810,6 +874,77 @@ function Health({profile,weights,compositions,onAddWeight,onAddComp,onDeleteWeig
             ))}
           </div>
           <Btn onClick={saveXi} full style={{marginTop:18}}>Salvar medição</Btn>
+        </Sheet>
+      )}
+
+      {sub==="medidas"&&(
+        <>
+          {/* -- Executar no Supabase SQL Editor:
+          create table if not exists medidas_corporais (
+            id uuid default gen_random_uuid() primary key,
+            cintura numeric, quadril numeric, braco_d numeric,
+            braco_e numeric, coxa_d numeric, coxa_e numeric,
+            pescoco numeric, peito numeric,
+            data date default current_date, obs text,
+            created_at timestamptz default now()
+          );
+          alter table medidas_corporais disable row level security; -- */}
+          <div style={{background:"rgba(96,165,250,.1)",border:"1px solid rgba(96,165,250,.2)",borderRadius:16,padding:14,marginBottom:18}}>
+            <p style={{fontSize:13,fontWeight:700,marginBottom:6}}>📏 Medidas Corporais</p>
+            <p style={{fontSize:12,color:C.muted,lineHeight:1.7}}>Registre mensalmente. A balança mente durante recomposição — as medidas mostram a verdade.</p>
+          </div>
+          <Btn onClick={()=>setShowMedidas(true)} full style={{marginBottom:20}}>+ Registrar medidas</Btn>
+          {medidas.length>0&&(
+            <>
+              <SLbl>Última medição — {fmt(medidas[0].data)}</SLbl>
+              <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:10,marginBottom:16}}>
+                {camposMedidas.filter(c=>medidas[0][c.k]).map((campo,i)=>(
+                  <Card key={i} style={{padding:"14px 13px"}}>
+                    <p style={{fontSize:10,color:C.dim,letterSpacing:".1em",textTransform:"uppercase",marginBottom:6}}>{campo.l}</p>
+                    <p style={{fontFamily:"'Clash Display',sans-serif",fontSize:22,fontWeight:700,color:C.blue}}>{medidas[0][campo.k]} cm</p>
+                    {campo.ref&&<p style={{fontSize:9,color:C.dim,marginTop:4}}>{campo.ref}</p>}
+                  </Card>
+                ))}
+              </div>
+              {medidas.length>1&&(
+                <>
+                  <SLbl>Histórico</SLbl>
+                  {medidas.slice(0,6).map((m,i)=>(
+                    <Card key={i} style={{marginBottom:8}}>
+                      <p style={{fontSize:12,fontWeight:700,color:C.muted,marginBottom:8}}>{fmt(m.data)}</p>
+                      <div style={{display:"flex",gap:12,flexWrap:"wrap"}}>
+                        {camposMedidas.filter(c=>m[c.k]).map(c=>(
+                          <div key={c.k} style={{textAlign:"center"}}>
+                            <p style={{fontFamily:"'Clash Display',sans-serif",fontSize:16,fontWeight:700,color:C.blue}}>{m[c.k]}</p>
+                            <p style={{fontSize:9,color:C.dim}}>{c.l.split(" ")[0]}</p>
+                          </div>
+                        ))}
+                      </div>
+                    </Card>
+                  ))}
+                </>
+              )}
+            </>
+          )}
+          {medidas.length===0&&<div style={{textAlign:"center",padding:"32px 0",color:C.dim}}><p style={{fontSize:32,marginBottom:8}}>📏</p><p style={{fontSize:13}}>Nenhuma medida registrada</p><p style={{fontSize:11,marginTop:4}}>Registre uma vez por mês para acompanhar a evolução real</p></div>}
+        </>
+      )}
+
+      {showMedidas&&(
+        <Sheet onClose={()=>setShowMedidas(false)} title="📏 Registrar Medidas" subtitle="Meça sempre no mesmo horário, em jejum.">
+          <div style={{background:"rgba(250,204,21,0.06)",border:"1px solid rgba(250,204,21,0.15)",borderRadius:12,padding:"12px 14px",marginBottom:16}}>
+            <p style={{fontSize:12,color:C.muted,lineHeight:1.7}}>📸 Dica: tire também fotos de frente, costas e lado com a mesma roupa e iluminação para comparar mensalmente.</p>
+          </div>
+          <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:10}}>
+            {camposMedidas.map(campo=>(
+              <div key={campo.k}>
+                <p style={{fontSize:9,letterSpacing:".14em",textTransform:"uppercase",color:C.dim,marginBottom:6,fontWeight:700}}>{campo.l}</p>
+                <input type="number" value={novasMedidas[campo.k]||""} onChange={e=>setNovasMedidas(p=>({...p,[campo.k]:e.target.value}))} placeholder="cm" style={{width:"100%",background:"rgba(255,255,255,.05)",border:"1.5px solid rgba(255,255,255,.1)",borderRadius:10,padding:"11px 12px",color:"#fff",fontSize:13,outline:"none",fontFamily:"inherit"}}/>
+              </div>
+            ))}
+          </div>
+          {loadingMedidas&&<Spin text="Salvando"/>}
+          <Btn onClick={salvarMedidas} full style={{marginTop:18}} disabled={loadingMedidas}>Salvar medidas</Btn>
         </Sheet>
       )}
     </div>
