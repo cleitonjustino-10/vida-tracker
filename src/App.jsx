@@ -75,9 +75,12 @@ const TABS=[
   {id:"training",icon:"🏋️",label:"Treino"},
   {id:"nutrition",icon:"🍽️",label:"Nutrição"},
   {id:"health",icon:"📊",label:"Saúde"},
-  {id:"journey",icon:"🏆",label:"Jornada"},
+  {id:"mais",icon:"☰",label:"Mais"},
+];
+const MAIS_ITEMS=[
   {id:"habits",icon:"🔥",label:"Hábitos"},
-  {id:"settings",icon:"⚙️",label:"Config"},
+  {id:"journey",icon:"🏆",label:"Jornada"},
+  {id:"settings",icon:"⚙️",label:"Configurações"},
 ];
 
 // UI Components
@@ -180,8 +183,11 @@ function Dashboard({profile,meals,weights,checkins,habits,trainings,onTab}){
   const days=Math.max(1,Math.floor((new Date()-new Date(profile.data_criacao||tk))/86400000)+1);
   const week=Array.from({length:7},(_,i)=>{const d=new Date();d.setDate(d.getDate()-6+i);const k=d.toISOString().slice(0,10);return{k,dw:["D","S","T","Q","Q","S","S"][d.getDay()],cal:meals.filter(m=>m.data===k).reduce((s,m)=>s+(m.calorias||0),0),tr:trainings.some(t=>t.data===k),today:k===tk};});
   useEffect(()=>{
+    const cached=localStorage.getItem("dashInsight"),cachedDate=localStorage.getItem("dashInsightDate");
+    if(cached&&cachedDate===todayStr()){setInsight(cached);return;}
     callAI([{role:"user",content:`${profile.nome}, ${lw}kg (meta ${profile.peso_meta}kg), proteína ${prot}/${profile.prot_meta}g, hábitos ${ctd.length}/${habits.length}. Objetivo Ultraman. 2 frases motivacionais.`}],"Coach Paulo Musy + Renato Cariani. Português direto.",160)
-      .then(setInsight).catch(()=>setInsight("Foco total. Cada treino te aproxima do Ultraman."));
+      .then(r=>{setInsight(r);localStorage.setItem("dashInsight",r);localStorage.setItem("dashInsightDate",todayStr());})
+      .catch(()=>setInsight("Foco total. Cada treino te aproxima do Ultraman."));
   },[]);
   const d14=new Date();d14.setDate(d14.getDate()-14);
   const recentW=weights.filter(w=>new Date(w.data+"T12:00:00")>=d14);
@@ -205,16 +211,16 @@ function Dashboard({profile,meals,weights,checkins,habits,trainings,onTab}){
         <div><p style={{fontSize:11,color:C.dim,letterSpacing:".1em",textTransform:"uppercase",marginBottom:3}}>Dia {days} · Jornada Ultraman</p><h1 style={{fontFamily:"'Clash Display',sans-serif",fontSize:28,fontWeight:700}}>Olá, <span style={{color:C.yellow}}>{profile.nome?.split(" ")[0]}</span> 💪</h1></div>
         <Ring value={days} max={180} size={56} sw={5} color={C.yellow}><span style={{fontSize:10,fontWeight:900,color:C.yellow}}>{Math.round((days/180)*100)}%</span></Ring>
       </div>
-      <Card style={{marginBottom:14}}>
-        <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:8}}>
-          <div style={{display:"flex",alignItems:"center",gap:10}}>
-            <div style={{width:30,height:30,borderRadius:9,background:"linear-gradient(135deg,#facc15,#f59e0b)",display:"flex",alignItems:"center",justifyContent:"center",fontSize:13,fontWeight:900,color:"#000"}}>{lvl}</div>
-            <div><p style={{fontSize:13,fontWeight:700,color:C.yellow,marginBottom:1}}>{LVLN[lvl]}</p><p style={{fontSize:10,color:C.dim}}>{(profile.xp||0).toLocaleString()} XP</p></div>
+      <div style={{display:"flex",alignItems:"center",gap:10,marginBottom:14,padding:"10px 14px",background:C.card,border:`1px solid ${C.border}`,borderRadius:14}}>
+        <div style={{width:26,height:26,borderRadius:8,background:"linear-gradient(135deg,#facc15,#f59e0b)",display:"flex",alignItems:"center",justifyContent:"center",fontSize:11,fontWeight:900,color:"#000",flexShrink:0}}>{lvl}</div>
+        <div style={{flex:1}}>
+          <div style={{display:"flex",justifyContent:"space-between",marginBottom:4}}>
+            <span style={{fontSize:11,fontWeight:700,color:C.yellow}}>{LVLN[lvl]}</span>
+            <span style={{fontSize:10,color:C.dim}}>{(profile.xp||0).toLocaleString()} XP · {Math.round(xpP)}%</span>
           </div>
-          <Badge>{Math.round(xpP)}%</Badge>
+          <Bar value={profile.xp||0} max={xpN}/>
         </div>
-        <Bar value={profile.xp||0} max={xpN}/>
-      </Card>
+      </div>
       <div style={{display:"grid",gridTemplateColumns:"1fr 1fr 1fr",gap:10,marginBottom:14}}>
         {[{v:cal,max:profile.cal_meta||2800,c:C.yellow,l:"KCAL",s:`/${profile.cal_meta}`},{v:prot,max:profile.prot_meta||336,c:C.purple,l:"PROT",s:`/${profile.prot_meta}g`},{v:ctd.length,max:habits.length||1,c:C.green,l:"HÁBITOS",s:`/${habits.length}`}].map((r,i)=>(
           <Card key={i} style={{padding:"14px 10px",display:"flex",flexDirection:"column",alignItems:"center",gap:8}}>
@@ -261,14 +267,6 @@ function Dashboard({profile,meals,weights,checkins,habits,trainings,onTab}){
           {week.map((d,i)=>{const pct=Math.min(1,d.cal/(profile.cal_meta||2800)),h=8+pct*46;return(<div key={i} style={{flex:1,display:"flex",flexDirection:"column",alignItems:"center",gap:4}}>{d.tr&&<div style={{width:6,height:6,borderRadius:"50%",background:C.green,marginBottom:2}}/>}<div style={{width:"100%",height:h,borderRadius:4,background:d.cal>(profile.cal_meta||2800)?"rgba(248,113,113,.4)":d.today?C.yellow:"rgba(250,204,21,.22)",boxShadow:d.today?"0 0 8px rgba(250,204,21,.35)":"none"}}/><span style={{fontSize:8,color:d.today?C.yellow:C.dim}}>{d.dw}</span></div>);})}
         </div>
       </Card>
-      <SLbl>Registro rápido</SLbl>
-      <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:10}}>
-        {[{e:"📸",l:"Foto da refeição",c:C.yellow,t:"nutrition"},{e:"⚖️",l:"Registrar peso",c:C.blue,t:"health"},{e:"🏋️",l:"Iniciar treino",c:C.purple,t:"training"},{e:"📊",l:"Balança Xiaomi",c:C.green,t:"health"}].map((a,i)=>(
-          <div key={i} onClick={()=>onTab(a.t)} style={{background:`${a.c}15`,border:`1px solid ${a.c}25`,borderRadius:16,padding:14,cursor:"pointer",display:"flex",alignItems:"center",gap:10}}>
-            <span style={{fontSize:22}}>{a.e}</span><span style={{fontSize:12,fontWeight:700,color:a.c,lineHeight:1.3}}>{a.l}</span>
-          </div>
-        ))}
-      </div>
     </div>
   );
 }
@@ -1050,6 +1048,8 @@ export default function App(){
   const [compositions,setCompositions]=useState([]);
   const [tab,setTab]=useState("home");
   const [showCheckin,setShowCheckin]=useState(false);
+  const [showMais,setShowMais]=useState(false);
+  const [showQuick,setShowQuick]=useState(false);
 
   const loadAll=useCallback(async()=>{
     try{
@@ -1130,14 +1130,41 @@ export default function App(){
       `}</style>
       <div style={{position:"relative",zIndex:1}}>{pages[tab]||pages.home}</div>
       {showCheckin&&<CheckinSemanal profile={profile} weights={weights} meals={meals} onClose={()=>setShowCheckin(false)}/>}
+      {showMais&&(
+        <Sheet title="Menu" onClose={()=>setShowMais(false)}>
+          {MAIS_ITEMS.map(item=>(
+            <div key={item.id} onClick={()=>{setTab(item.id);setShowMais(false);}} style={{display:"flex",alignItems:"center",gap:14,padding:"16px 0",borderBottom:`1px solid ${C.border}`,cursor:"pointer"}}>
+              <span style={{fontSize:24}}>{item.icon}</span>
+              <span style={{fontSize:15,fontWeight:600}}>{item.label}</span>
+            </div>
+          ))}
+        </Sheet>
+      )}
+      <div style={{position:"fixed",bottom:80,right:"max(16px,calc(50vw - 244px))",zIndex:150}}>
+        {showQuick&&(
+          <div style={{position:"absolute",bottom:64,right:0,display:"flex",flexDirection:"column",gap:8,alignItems:"flex-end"}}>
+            {[{e:"🍽️",l:"Refeição",t:"nutrition"},{e:"🏋️",l:"Treino",t:"training"},{e:"⚖️",l:"Peso",t:"health"}].map(a=>(
+              <div key={a.t} onClick={()=>{setTab(a.t);setShowQuick(false);}} style={{display:"flex",alignItems:"center",gap:10,background:C.surface,border:`1px solid ${C.border}`,borderRadius:20,padding:"9px 16px",cursor:"pointer",whiteSpace:"nowrap",boxShadow:"0 4px 16px rgba(0,0,0,.4)"}}>
+                <span style={{fontSize:18}}>{a.e}</span>
+                <span style={{fontSize:13,fontWeight:700,color:"#fff"}}>{a.l}</span>
+              </div>
+            ))}
+          </div>
+        )}
+        <button onClick={()=>setShowQuick(q=>!q)} style={{width:52,height:52,borderRadius:"50%",background:C.yellow,border:"none",fontSize:26,cursor:"pointer",color:"#000",fontWeight:900,boxShadow:"0 4px 20px rgba(250,204,21,.45)",display:"flex",alignItems:"center",justifyContent:"center",transition:"transform .2s",transform:showQuick?"rotate(45deg)":"none"}}>+</button>
+      </div>
       <div style={{position:"fixed",bottom:0,left:"50%",transform:"translateX(-50%)",width:"100%",maxWidth:520,background:"rgba(10,10,15,.97)",backdropFilter:"blur(24px)",borderTop:`1px solid ${C.border}`,zIndex:100}}>
         <div style={{display:"flex",padding:`8px 2px max(20px,env(safe-area-inset-bottom,20px))`}}>
-          {TABS.map(t=>(
-            <button key={t.id} onClick={()=>setTab(t.id)} style={{flex:1,display:"flex",flexDirection:"column",alignItems:"center",gap:3,padding:"8px 2px",border:"none",cursor:"pointer",background:tab===t.id?"rgba(250,204,21,.08)":"transparent",borderRadius:10,fontFamily:"inherit",transition:"all .2s",borderBottom:tab===t.id?`2px solid ${C.yellow}`:"2px solid transparent"}}>
-              <span style={{fontSize:15}}>{t.icon}</span>
-              <span style={{fontSize:8,fontWeight:tab===t.id?800:400,color:tab===t.id?C.yellow:C.dim,letterSpacing:".03em"}}>{t.label}</span>
-            </button>
-          ))}
+          {TABS.map(t=>{
+            const isMais=t.id==="mais";
+            const isActive=isMais?MAIS_ITEMS.some(m=>m.id===tab):tab===t.id;
+            return(
+              <button key={t.id} onClick={()=>isMais?setShowMais(v=>!v):setTab(t.id)} style={{flex:1,display:"flex",flexDirection:"column",alignItems:"center",gap:3,padding:"8px 2px",border:"none",cursor:"pointer",background:isActive?"rgba(250,204,21,.08)":"transparent",borderRadius:10,fontFamily:"inherit",transition:"all .2s",borderBottom:isActive?`2px solid ${C.yellow}`:"2px solid transparent"}}>
+                <span style={{fontSize:15}}>{t.icon}</span>
+                <span style={{fontSize:8,fontWeight:isActive?800:400,color:isActive?C.yellow:C.dim,letterSpacing:".03em"}}>{t.label}</span>
+              </button>
+            );
+          })}
         </div>
       </div>
     </div>
