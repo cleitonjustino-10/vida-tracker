@@ -12,6 +12,7 @@ async function callAI(msgs,sys="",max=1000){
   const r=await fetch("https://api.anthropic.com/v1/messages",{method:"POST",headers:{"Content-Type":"application/json","x-api-key":getAK(),"anthropic-version":"2023-06-01","anthropic-dangerous-direct-browser-access":"true"},body:JSON.stringify({model:"claude-sonnet-4-6",max_tokens:max,system:sys,messages:msgs})});
   const d=await r.json();if(d.error)throw new Error(d.error.message);return d.content?.map(b=>b.text||"").join("")||"";
 }
+const compressImg=(dataUrl,maxPx=1100)=>new Promise(res=>{const img=new Image();img.onload=()=>{const ratio=Math.min(maxPx/img.width,maxPx/img.height,1);const c=document.createElement("canvas");c.width=Math.round(img.width*ratio);c.height=Math.round(img.height*ratio);c.getContext("2d").drawImage(img,0,0,c.width,c.height);res(c.toDataURL("image/jpeg",0.82));};img.src=dataUrl;});
 async function callVision(b64,mime,prompt){
   const r=await fetch("https://api.anthropic.com/v1/messages",{method:"POST",headers:{"Content-Type":"application/json","x-api-key":getAK(),"anthropic-version":"2023-06-01","anthropic-dangerous-direct-browser-access":"true"},body:JSON.stringify({model:"claude-sonnet-4-6",max_tokens:1500,system:"Retorne APENAS JSON válido sem markdown.",messages:[{role:"user",content:[{type:"image",source:{type:"base64",media_type:mime,data:b64}},{type:"text",text:prompt}]}]})});
   const d=await r.json();if(d.error)throw new Error(d.error.message);const txt=d.content?.map(b=>b.text||"").join("")||"{}";
@@ -756,9 +757,10 @@ function Health({profile,weights,compositions,onAddWeight,onAddComp,onDeleteWeig
     setLoadXi(true);
     const reader=new FileReader();
     reader.onload=async(e)=>{
-      const b64=e.target.result.split(",")[1];
       try{
-        const zp="Extraia valores do app Zepp Life. JSON com campos: peso, gordura_pct, musculo_kg, agua_pct, proteina_pct, gordura_visceral, metabolismo_basal, massa_ossea. Valores numeros, null se nao visivel.";const r=await callVision(b64,file.type,zp);
+        const compressed=await compressImg(e.target.result);
+        const b64=compressed.split(",")[1];
+        const zp="Extraia valores do app Zepp Life. JSON com campos: peso, gordura_pct, musculo_kg, agua_pct, proteina_pct, gordura_visceral, metabolismo_basal, massa_ossea. Valores numeros, null se nao visivel.";const r=await callVision(b64,"image/jpeg",zp);
         if(r){setXi({peso:r.peso?.toString()||"",gordura_pct:r.gordura_pct?.toString()||"",musculo_kg:r.musculo_kg?.toString()||"",agua_pct:r.agua_pct?.toString()||"",proteina_pct:r.proteina_pct?.toString()||"",gordura_visceral:r.gordura_visceral?.toString()||"",metabolismo_basal:r.metabolismo_basal?.toString()||"",massa_ossea:r.massa_ossea?.toString()||""});setShowX(true);}
         else{alert("IA não conseguiu extrair dados. Tente outra foto ou preencha manualmente.");}
       }catch(e){alert("Erro ao analisar foto Zepp: "+e.message);}
@@ -779,18 +781,18 @@ function Health({profile,weights,compositions,onAddWeight,onAddComp,onDeleteWeig
     setLoadEx(true);
     const reader=new FileReader();
     reader.onload=async(e)=>{
-      const b64=e.target.result.split(",")[1];
       const isPdf=file.type==="application/pdf";
-      if(!isPdf) setExImg(e.target.result);
-      const ep="Analise este exame de sangue. Retorne JSON com: marcadores(array com nome,valor,unidade,referencia,status,interpretacao,recomendacao), resumo, alertas, pontos_positivos, impacto_performance";
+      const ep=`Médico especialista medicina esportiva. Paciente: ${profile?.nome||"atleta"}, ${profile?.peso||130}kg, meta ${profile?.peso_meta||90}kg, objetivo Ultraman triathlon, fase de emagrecimento com treinos natação/bike/corrida. RETORNE APENAS JSON VÁLIDO: {"marcadores":[{"nome":"","valor":"","unidade":"","referencia":"","status":"ok|atencao|critico","interpretacao":"","impacto_treino":"como afeta treino e recuperação","recomendacao":"ação específica"}],"resumo":"","alertas":[],"pontos_positivos":[],"o_que_mudar":[{"marcador":"","acao":"ação concreta","prazo":"ex: 30 dias"}],"ajustes_nutricionais":["ajustes em proteína, carboidratos, gordura, vitaminas e minerais baseados nos resultados"],"suplementacao":["suplemento e dosagem recomendada"],"impacto_performance":"","plano_30_dias":""}`;
       try{
         let r;
         if(isPdf){
-          const res=await fetch("https://api.anthropic.com/v1/messages",{method:"POST",headers:{"Content-Type":"application/json","x-api-key":getAK(),"anthropic-version":"2023-06-01","anthropic-dangerous-direct-browser-access":"true"},body:JSON.stringify({model:"claude-sonnet-4-6",max_tokens:1500,system:"Retorne APENAS JSON válido sem markdown.",messages:[{role:"user",content:[{type:"document",source:{type:"base64",media_type:"application/pdf",data:b64}},{type:"text",text:ep}]}]})});
-          const d=await res.json();const txt=d.content?.map(b=>b.text||"").join("")||"{}";
+          const res=await fetch("https://api.anthropic.com/v1/messages",{method:"POST",headers:{"Content-Type":"application/json","x-api-key":getAK(),"anthropic-version":"2023-06-01","anthropic-dangerous-direct-browser-access":"true"},body:JSON.stringify({model:"claude-sonnet-4-6",max_tokens:3000,system:"Retorne APENAS JSON válido sem markdown.",messages:[{role:"user",content:[{type:"document",source:{type:"base64",media_type:"application/pdf",data:e.target.result.split(",")[1]}},{type:"text",text:ep}]}]})});
+          const d=await res.json();if(d.error)throw new Error(d.error.message);const txt=d.content?.map(b=>b.text||"").join("")||"{}";
           try{r=JSON.parse(txt.replace(/```json|```/g,"").trim());}catch{r=null;}
         }else{
-          r=await callVision(b64,file.type,ep);
+          const compressed=await compressImg(e.target.result,1400);
+          setExImg(compressed);
+          r=await callVision(compressed.split(",")[1],"image/jpeg",ep);
         }
         if(r)setExRes(r);
         else alert("IA retornou resposta inválida. Tente novamente.");
@@ -807,7 +809,7 @@ function Health({profile,weights,compositions,onAddWeight,onAddComp,onDeleteWeig
     const url=URL.createObjectURL(blob);const a=document.createElement("a");a.href=url;a.download=`exame-${todayStr()}.txt`;a.click();URL.revokeObjectURL(url);
   };
 
-  const sColor=(s)=>s==="ok"?C.green:s==="crítico"?C.red:C.orange;
+  const sColor=(s)=>(!s||s==="ok")?C.green:(s==="crítico"||s==="critico")?C.red:C.orange;
   const camposMedidas=[{k:"cintura",l:"Cintura (cm)",ref:"Meta: < 94cm"},{k:"quadril",l:"Quadril (cm)",ref:"Rel. cintura/quadril"},{k:"peito",l:"Peito (cm)",ref:""},{k:"braco_d",l:"Braço Dir. (cm)",ref:"Flexionado"},{k:"braco_e",l:"Braço Esq. (cm)",ref:"Flexionado"},{k:"coxa_d",l:"Coxa Dir. (cm)",ref:""},{k:"coxa_e",l:"Coxa Esq. (cm)",ref:""},{k:"pescoco",l:"Pescoço (cm)",ref:""}];
   const salvarMedidas=async()=>{
     setLoadingMedidas(true);
@@ -901,27 +903,42 @@ function Health({profile,weights,compositions,onAddWeight,onAddComp,onDeleteWeig
           {exRes&&!loadEx&&(
             <>
               {exImg&&<img src={exImg} alt="" style={{width:"100%",borderRadius:14,marginBottom:16,maxHeight:160,objectFit:"cover"}}/>}
-              <Card style={{marginBottom:14,background:"rgba(96,165,250,.1)",border:"1px solid rgba(96,165,250,.2)"}}>
-                <p style={{fontSize:9,letterSpacing:".15em",textTransform:"uppercase",color:C.blue,marginBottom:8,fontWeight:800}}>✦ Resumo</p>
-                <p style={{fontSize:13,color:"rgba(255,255,255,.7)",lineHeight:1.7,marginBottom:exRes.impacto_performance?10:0}}>{exRes.resumo}</p>
-                {exRes.impacto_performance&&<><p style={{fontSize:9,letterSpacing:".15em",textTransform:"uppercase",color:C.purple,marginBottom:6,fontWeight:800,marginTop:8}}>Performance</p><p style={{fontSize:12,color:C.muted,lineHeight:1.6}}>{exRes.impacto_performance}</p></>}
+              {/* Resumo + Performance */}
+              <Card style={{marginBottom:12,background:"rgba(96,165,250,.1)",border:"1px solid rgba(96,165,250,.2)"}}>
+                <p style={{fontSize:9,letterSpacing:".15em",textTransform:"uppercase",color:C.blue,marginBottom:8,fontWeight:800}}>✦ Resumo geral</p>
+                <p style={{fontSize:13,color:"rgba(255,255,255,.75)",lineHeight:1.7}}>{exRes.resumo}</p>
+                {exRes.impacto_performance&&<><p style={{fontSize:9,letterSpacing:".15em",textTransform:"uppercase",color:C.purple,marginBottom:6,fontWeight:800,marginTop:12}}>⚡ Impacto na performance</p><p style={{fontSize:12,color:C.muted,lineHeight:1.6}}>{exRes.impacto_performance}</p></>}
               </Card>
-              {exRes.alertas?.length>0&&<Card style={{marginBottom:14,background:"rgba(248,113,113,.1)",border:"1px solid rgba(248,113,113,.2)"}}><p style={{fontSize:9,letterSpacing:".15em",textTransform:"uppercase",color:C.red,marginBottom:8,fontWeight:800}}>⚠ Atenção</p>{exRes.alertas.map((a,i)=><p key={i} style={{fontSize:12,color:"rgba(255,255,255,.65)",marginBottom:3}}>• {a}</p>)}</Card>}
-              {exRes.pontos_positivos?.length>0&&<Card style={{marginBottom:14,background:"rgba(74,222,128,.1)",border:"1px solid rgba(74,222,128,.2)"}}><p style={{fontSize:9,letterSpacing:".15em",textTransform:"uppercase",color:C.green,marginBottom:8,fontWeight:800}}>✓ Positivos</p>{exRes.pontos_positivos.map((a,i)=><p key={i} style={{fontSize:12,color:"rgba(255,255,255,.65)",marginBottom:3}}>• {a}</p>)}</Card>}
-              <SLbl>Marcadores</SLbl>
+              {/* Plano 30 dias */}
+              {exRes.plano_30_dias&&<Card style={{marginBottom:12,background:"rgba(250,204,21,.07)",border:"1px solid rgba(250,204,21,.2)"}}><p style={{fontSize:9,letterSpacing:".15em",textTransform:"uppercase",color:C.yellow,marginBottom:8,fontWeight:800}}>🗓 Plano 30 dias</p><p style={{fontSize:12,color:"rgba(255,255,255,.7)",lineHeight:1.7}}>{exRes.plano_30_dias}</p></Card>}
+              {/* O que mudar */}
+              {exRes.o_que_mudar?.length>0&&<Card style={{marginBottom:12,background:"rgba(248,113,113,.08)",border:"1px solid rgba(248,113,113,.25)"}}><p style={{fontSize:9,letterSpacing:".15em",textTransform:"uppercase",color:C.red,marginBottom:10,fontWeight:800}}>🔧 O que precisa mudar</p>{exRes.o_que_mudar.map((item,i)=><div key={i} style={{display:"flex",gap:10,marginBottom:10,alignItems:"flex-start"}}><div style={{width:6,height:6,borderRadius:"50%",background:C.red,marginTop:5,flexShrink:0}}/><div><p style={{fontSize:12,fontWeight:700,color:"rgba(255,255,255,.85)",marginBottom:2}}>{item.marcador}</p><p style={{fontSize:11,color:C.muted,lineHeight:1.5}}>{item.acao}</p>{item.prazo&&<span style={{fontSize:10,color:C.red,fontWeight:600}}>⏱ {item.prazo}</span>}</div></div>)}</Card>}
+              {/* Alertas */}
+              {exRes.alertas?.length>0&&<Card style={{marginBottom:12,background:"rgba(251,146,60,.08)",border:"1px solid rgba(251,146,60,.25)"}}><p style={{fontSize:9,letterSpacing:".15em",textTransform:"uppercase",color:C.orange,marginBottom:8,fontWeight:800}}>⚠ Atenção</p>{exRes.alertas.map((a,i)=><p key={i} style={{fontSize:12,color:"rgba(255,255,255,.65)",marginBottom:4,lineHeight:1.5}}>• {a}</p>)}</Card>}
+              {/* Ajustes nutricionais */}
+              {exRes.ajustes_nutricionais?.length>0&&<Card style={{marginBottom:12,background:"rgba(167,139,250,.08)",border:"1px solid rgba(167,139,250,.25)"}}><p style={{fontSize:9,letterSpacing:".15em",textTransform:"uppercase",color:C.purple,marginBottom:10,fontWeight:800}}>🥗 Ajustes nutricionais (macros)</p>{exRes.ajustes_nutricionais.map((a,i)=><p key={i} style={{fontSize:12,color:"rgba(255,255,255,.7)",marginBottom:6,lineHeight:1.5}}>• {a}</p>)}</Card>}
+              {/* Suplementação */}
+              {exRes.suplementacao?.length>0&&<Card style={{marginBottom:12,background:"rgba(96,165,250,.08)",border:"1px solid rgba(96,165,250,.2)"}}><p style={{fontSize:9,letterSpacing:".15em",textTransform:"uppercase",color:C.blue,marginBottom:10,fontWeight:800}}>💊 Suplementação recomendada</p>{exRes.suplementacao.map((s,i)=><p key={i} style={{fontSize:12,color:"rgba(255,255,255,.7)",marginBottom:6,lineHeight:1.5}}>• {s}</p>)}</Card>}
+              {/* Pontos positivos */}
+              {exRes.pontos_positivos?.length>0&&<Card style={{marginBottom:12,background:"rgba(74,222,128,.08)",border:"1px solid rgba(74,222,128,.2)"}}><p style={{fontSize:9,letterSpacing:".15em",textTransform:"uppercase",color:C.green,marginBottom:8,fontWeight:800}}>✓ Pontos positivos</p>{exRes.pontos_positivos.map((a,i)=><p key={i} style={{fontSize:12,color:"rgba(255,255,255,.65)",marginBottom:4}}>• {a}</p>)}</Card>}
+              {/* Marcadores detalhados */}
+              <SLbl mt={4}>Marcadores detalhados</SLbl>
               {exRes.marcadores?.map((m,i)=>(
-                <Card key={i} style={{marginBottom:10}}>
-                  <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start",marginBottom:8}}>
-                    <div><p style={{fontSize:13,fontWeight:700,marginBottom:3}}>{m.nome}</p><p style={{fontFamily:"'Clash Display',sans-serif",fontSize:20,fontWeight:700,color:sColor(m.status)}}>{m.valor}<span style={{fontSize:11,color:C.muted,marginLeft:4}}>{m.unidade}</span></p></div>
-                    <Badge color={sColor(m.status)}>{m.status}</Badge>
+                <Card key={i} style={{marginBottom:10,borderLeft:`3px solid ${sColor(m.status)}`}}>
+                  <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start",marginBottom:6}}>
+                    <div><p style={{fontSize:13,fontWeight:700,marginBottom:4}}>{m.nome}</p><p style={{fontFamily:"'Clash Display',sans-serif",fontSize:22,fontWeight:700,color:sColor(m.status)}}>{m.valor}<span style={{fontSize:11,color:C.muted,marginLeft:4}}>{m.unidade}</span></p></div>
+                    <Badge color={sColor(m.status)} style={{flexShrink:0}}>{m.status}</Badge>
                   </div>
-                  <p style={{fontSize:11,color:C.muted,marginBottom:6}}>Ref: {m.referencia}</p>
-                  <p style={{fontSize:12,color:"rgba(255,255,255,.6)",lineHeight:1.6,marginBottom:m.recomendacao?6:0}}>{m.interpretacao}</p>
+                  <p style={{fontSize:10,color:C.dim,marginBottom:6}}>Ref: {m.referencia}</p>
+                  <p style={{fontSize:12,color:"rgba(255,255,255,.6)",lineHeight:1.6,marginBottom:6}}>{m.interpretacao}</p>
+                  {m.impacto_treino&&<p style={{fontSize:11,color:C.purple,lineHeight:1.5,marginBottom:m.recomendacao?6:0}}>🏋️ {m.impacto_treino}</p>}
                   {m.recomendacao&&<p style={{fontSize:11,color:C.blue,lineHeight:1.5}}>💡 {m.recomendacao}</p>}
                 </Card>
               ))}
-              <Btn onClick={()=>{setExRes(null);setExImg(null);}} variant="ghost" full style={{marginTop:8,marginBottom:8}}>Novo exame</Btn>
-              {exRes?.marcadores&&<Btn onClick={async()=>{try{for(const m of exRes.marcadores){await DB.post("marcadores_exame",{nome:m.nome,valor:parseFloat(m.valor)||null,unidade:m.unidade||"",status:m.status||"ok",referencia:m.referencia||"",data:todayStr(),fonte:"foto_ia"});}const r=await DB.get("marcadores_exame","?order=created_at.desc&limit=100");setMarcadoresHist(r||[]);alert("Marcadores salvos no histórico!");}catch(e){console.error(e);}}} variant="green" full style={{marginBottom:8}}>💾 Salvar marcadores no histórico</Btn>}
+              <div style={{display:"flex",gap:8,marginTop:8,marginBottom:8}}>
+                <Btn onClick={()=>{setExRes(null);setExImg(null);}} variant="ghost" full>Novo exame</Btn>
+                {exRes?.marcadores&&<Btn onClick={async()=>{try{for(const m of exRes.marcadores){await DB.post("marcadores_exame",{nome:m.nome,valor:parseFloat(m.valor)||null,unidade:m.unidade||"",status:m.status||"ok",referencia:m.referencia||"",data:todayStr(),fonte:"foto_ia"});}const r=await DB.get("marcadores_exame","?order=created_at.desc&limit=100");setMarcadoresHist(r||[]);alert("Marcadores salvos!");}catch(e){alert("Erro: "+e.message);}}} variant="green" full>💾 Salvar histórico</Btn>}
+              </div>
             </>
           )}
           <Btn onClick={()=>setShowMarcadorSheet(true)} variant="ghost" full style={{marginBottom:20}}>+ Adicionar marcador manualmente</Btn>
