@@ -8,7 +8,7 @@ async function sbq(m,t,b=null,q=""){
 }
 const DB={get:(t,q="")=>sbq("GET",t,null,q),post:(t,b)=>sbq("POST",t,b),patch:(t,q,b)=>sbq("PATCH",t,b,q),del:(t,q)=>sbq("DELETE",t,null,q)};
 const getAK=()=>localStorage.getItem("anthropic_key")||import.meta.env.VITE_ANTHROPIC_KEY||"";
-const GURL=(max=1000)=>`https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${getAK()}`;
+const GURL=()=>`https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${getAK()}`;
 async function callAI(msgs,sys="",max=1000){
   const body={contents:msgs.map(m=>({role:m.role==="assistant"?"model":"user",parts:[{text:m.content}]})),generationConfig:{maxOutputTokens:max}};
   if(sys)body.systemInstruction={parts:[{text:sys}]};
