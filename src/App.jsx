@@ -8,14 +8,20 @@ async function sbq(m,t,b=null,q=""){
 }
 const DB={get:(t,q="")=>sbq("GET",t,null,q),post:(t,b)=>sbq("POST",t,b),patch:(t,q,b)=>sbq("PATCH",t,b,q),del:(t,q)=>sbq("DELETE",t,null,q)};
 const getAK=()=>localStorage.getItem("anthropic_key")||import.meta.env.VITE_ANTHROPIC_KEY||"";
+const GURL=(max=1000)=>`https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${getAK()}`;
 async function callAI(msgs,sys="",max=1000){
-  const r=await fetch("https://api.anthropic.com/v1/messages",{method:"POST",headers:{"Content-Type":"application/json","x-api-key":getAK(),"anthropic-version":"2023-06-01","anthropic-dangerous-direct-browser-access":"true"},body:JSON.stringify({model:"claude-sonnet-4-6",max_tokens:max,system:sys,messages:msgs})});
-  const d=await r.json();if(d.error)throw new Error(d.error.message);return d.content?.map(b=>b.text||"").join("")||"";
+  const body={contents:msgs.map(m=>({role:m.role==="assistant"?"model":"user",parts:[{text:m.content}]})),generationConfig:{maxOutputTokens:max}};
+  if(sys)body.systemInstruction={parts:[{text:sys}]};
+  const r=await fetch(GURL(),{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify(body)});
+  const d=await r.json();if(d.error)throw new Error(d.error.message);
+  return d.candidates?.[0]?.content?.parts?.map(p=>p.text||"").join("")||"";
 }
 const compressImg=(dataUrl,maxPx=1100)=>new Promise(res=>{const img=new Image();img.onload=()=>{const ratio=Math.min(maxPx/img.width,maxPx/img.height,1);const c=document.createElement("canvas");c.width=Math.round(img.width*ratio);c.height=Math.round(img.height*ratio);c.getContext("2d").drawImage(img,0,0,c.width,c.height);res(c.toDataURL("image/jpeg",0.82));};img.src=dataUrl;});
 async function callVision(b64,mime,prompt){
-  const r=await fetch("https://api.anthropic.com/v1/messages",{method:"POST",headers:{"Content-Type":"application/json","x-api-key":getAK(),"anthropic-version":"2023-06-01","anthropic-dangerous-direct-browser-access":"true"},body:JSON.stringify({model:"claude-sonnet-4-6",max_tokens:1500,system:"Retorne APENAS JSON válido sem markdown.",messages:[{role:"user",content:[{type:"image",source:{type:"base64",media_type:mime,data:b64}},{type:"text",text:prompt}]}]})});
-  const d=await r.json();if(d.error)throw new Error(d.error.message);const txt=d.content?.map(b=>b.text||"").join("")||"{}";
+  const body={contents:[{parts:[{inlineData:{mimeType:mime,data:b64}},{text:prompt}]}],systemInstruction:{parts:[{text:"Retorne APENAS JSON válido sem markdown."}]},generationConfig:{maxOutputTokens:2000}};
+  const r=await fetch(GURL(),{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify(body)});
+  const d=await r.json();if(d.error)throw new Error(d.error.message);
+  const txt=d.candidates?.[0]?.content?.parts?.map(p=>p.text||"").join("")||"{}";
   try{return JSON.parse(txt.replace(/```json|```/g,"").trim());}catch{return null;}
 }
 
@@ -786,8 +792,10 @@ function Health({profile,weights,compositions,onAddWeight,onAddComp,onDeleteWeig
       try{
         let r;
         if(isPdf){
-          const res=await fetch("https://api.anthropic.com/v1/messages",{method:"POST",headers:{"Content-Type":"application/json","x-api-key":getAK(),"anthropic-version":"2023-06-01","anthropic-dangerous-direct-browser-access":"true"},body:JSON.stringify({model:"claude-sonnet-4-6",max_tokens:3000,system:"Retorne APENAS JSON válido sem markdown.",messages:[{role:"user",content:[{type:"document",source:{type:"base64",media_type:"application/pdf",data:e.target.result.split(",")[1]}},{type:"text",text:ep}]}]})});
-          const d=await res.json();if(d.error)throw new Error(d.error.message);const txt=d.content?.map(b=>b.text||"").join("")||"{}";
+          const body={contents:[{parts:[{inlineData:{mimeType:"application/pdf",data:e.target.result.split(",")[1]}},{text:ep}]}],systemInstruction:{parts:[{text:"Retorne APENAS JSON válido sem markdown."}]},generationConfig:{maxOutputTokens:3000}};
+          const res=await fetch(GURL(),{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify(body)});
+          const d=await res.json();if(d.error)throw new Error(d.error.message);
+          const txt=d.candidates?.[0]?.content?.parts?.map(p=>p.text||"").join("")||"{}";
           try{r=JSON.parse(txt.replace(/```json|```/g,"").trim());}catch{r=null;}
         }else{
           const compressed=await compressImg(e.target.result,1400);
@@ -1261,11 +1269,11 @@ function Settings({profile,onUpdateProfile}){
             <div style={{display:"flex",alignItems:"center",gap:12,marginBottom:14}}>
               <div style={{width:40,height:40,borderRadius:12,background:"rgba(251,191,36,.15)",display:"flex",alignItems:"center",justifyContent:"center",fontSize:20}}>🤖</div>
               <div>
-                <p style={{fontSize:14,fontWeight:700,marginBottom:2}}>Claude IA — API Key</p>
+                <p style={{fontSize:14,fontWeight:700,marginBottom:2}}>Gemini IA — API Key</p>
                 <p style={{fontSize:11,color:apiKey?C.green:C.orange}}>{apiKey?"✓ Configurada":"⚠ Necessária para análises por foto e Coach IA"}</p>
               </div>
             </div>
-            <input type="password" value={apiKey} onChange={e=>setApiKey(e.target.value)} placeholder="sk-ant-api03-..." style={{width:"100%",background:"rgba(255,255,255,.05)",border:"1.5px solid rgba(255,255,255,.1)",borderRadius:10,padding:"11px 14px",color:"#fff",fontSize:13,outline:"none",fontFamily:"inherit",marginBottom:10}}/>
+            <input type="password" value={apiKey} onChange={e=>setApiKey(e.target.value)} placeholder="AIza..." style={{width:"100%",background:"rgba(255,255,255,.05)",border:"1.5px solid rgba(255,255,255,.1)",borderRadius:10,padding:"11px 14px",color:"#fff",fontSize:13,outline:"none",fontFamily:"inherit",marginBottom:10}}/>
             <Btn onClick={()=>{localStorage.setItem("anthropic_key",apiKey);setApiKeySaved(true);setTimeout(()=>setApiKeySaved(false),2000);}} variant={apiKey?"green":"primary"} full>{apiKeySaved?"✓ Salva!":"Salvar API Key"}</Btn>
           </Card>
           <Card style={{marginBottom:16}}>
