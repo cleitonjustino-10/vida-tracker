@@ -206,7 +206,7 @@ function Dashboard({profile,meals,weights,checkins,habits,trainings,onTab}){
     setLoadingPlateau(false);
   };
   return(
-    <div style={{padding:"22px 18px",paddingBottom:110}}>
+    <div style={{padding:"22px 18px",paddingBottom:170}}>
       <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:22}}>
         <div><p style={{fontSize:11,color:C.dim,letterSpacing:".1em",textTransform:"uppercase",marginBottom:3}}>Dia {days} · Jornada Ultraman</p><h1 style={{fontFamily:"'Clash Display',sans-serif",fontSize:28,fontWeight:700}}>Olá, <span style={{color:C.yellow}}>{profile.nome?.split(" ")[0]}</span> 💪</h1></div>
         <Ring value={days} max={180} size={56} sw={5} color={C.yellow}><span style={{fontSize:10,fontWeight:900,color:C.yellow}}>{Math.round((days/180)*100)}%</span></Ring>
@@ -304,7 +304,7 @@ function Training({profile,trainings,onAdd,onDelete}){
   const filtered=filter==="all"?trainings:trainings.filter(t=>t.modalidade===filter);
   const weekCount=trainings.filter(t=>new Date()-new Date(t.data)<7*86400000).length;
   return(
-    <div style={{padding:"22px 18px",paddingBottom:110}}>
+    <div style={{padding:"22px 18px",paddingBottom:170}}>
       <div style={{marginBottom:20}}><h2 style={{fontFamily:"'Clash Display',sans-serif",fontSize:26,fontWeight:700,marginBottom:4}}>Treinos 🏋️</h2><p style={{fontSize:12,color:C.muted}}>Musculação · Natação · Bike · Tênis · Corrida</p></div>
       <div style={{display:"flex",gap:8,marginBottom:10}}>
         {[{v:weekCount,l:"Esta semana",c:C.yellow},{v:trainings.length,l:"Total",c:C.blue},{v:trainings.reduce((s,t)=>s+(t.duracao||0),0),l:"Minutos",c:C.green}].map((s,i)=>(
@@ -474,7 +474,7 @@ function Nutrition({profile,meals,onAdd,onDelete}){
   };
 
   return(
-    <div style={{padding:"22px 18px",paddingBottom:110}}>
+    <div style={{padding:"22px 18px",paddingBottom:170}}>
       <div style={{marginBottom:20}}><h2 style={{fontFamily:"'Clash Display',sans-serif",fontSize:26,fontWeight:700,marginBottom:4}}>Nutrição 🍽️</h2><p style={{fontSize:12,color:C.muted}}>Meta: {profile?.cal_meta}kcal · {profile?.prot_meta}g proteína</p></div>
       <Tabs2 tabs={[{id:"hoje",label:"Hoje"},{id:"cal",label:"Calendário"},{id:"taco",label:"TACO 🇧🇷"},{id:"foto",label:"Foto IA"}]} active={sub} onChange={setSub}/>
 
@@ -682,7 +682,7 @@ function Health({profile,weights,compositions,onAddWeight,onAddComp,onDeleteWeig
   const sColor=(s)=>s==="ok"?C.green:s==="crítico"?C.red:C.orange;
 
   return(
-    <div style={{padding:"22px 18px",paddingBottom:110}}>
+    <div style={{padding:"22px 18px",paddingBottom:170}}>
       <div style={{marginBottom:20}}><h2 style={{fontFamily:"'Clash Display',sans-serif",fontSize:26,fontWeight:700,marginBottom:4}}>Saúde 📊</h2><p style={{fontSize:12,color:C.muted}}>Peso · Composição · Exames</p></div>
       <Tabs2 tabs={[{id:"peso",label:"Peso"},{id:"comp",label:"Xiaomi"},{id:"exames",label:"Exames"}]} active={sub} onChange={setSub}/>
 
@@ -822,7 +822,7 @@ function Journey({profile,weights,trainings}){
   const lost=Math.max(0,(profile?.peso||0)-(lw||0));
   const phase=lw>130?1:lw>120?2:lw>110?3:lw>100?4:lw>95?5:6;
   return(
-    <div style={{padding:"22px 18px",paddingBottom:110}}>
+    <div style={{padding:"22px 18px",paddingBottom:170}}>
       <div style={{marginBottom:20}}><h2 style={{fontFamily:"'Clash Display',sans-serif",fontSize:26,fontWeight:700,marginBottom:4}}>Jornada Ultraman 🏆</h2><p style={{fontSize:12,color:C.muted}}>Sua linha do tempo até o objetivo final</p></div>
       <div style={{background:"linear-gradient(135deg,rgba(250,204,21,.08),rgba(250,204,21,.02))",border:"1px solid rgba(250,204,21,.2)",borderRadius:22,padding:20,marginBottom:24,textAlign:"center"}}>
         <p style={{fontSize:11,color:C.dim,letterSpacing:".15em",textTransform:"uppercase",marginBottom:8}}>Você está na</p>
@@ -865,7 +865,7 @@ function Habits({habits,checkins,onToggle,onAdd,onRemove}){
   const EMOJIS=["🌅","💧","🏃","📚","🧘","✍️","🥗","🌙","🎯","💰","🤝","🔥","⏱️","🎓","💊","🏋️","🍎","🏊","🎾","🚴"];
   const week=Array.from({length:7},(_,i)=>{const d=new Date();d.setDate(d.getDate()-6+i);const k=d.toISOString().slice(0,10);return{k,day:d.getDate(),dw:["D","S","T","Q","Q","S","S"][d.getDay()],done:checkins.filter(c=>c.data===k).length,today:k===tk};});
   return(
-    <div style={{padding:"22px 18px",paddingBottom:110}}>
+    <div style={{padding:"22px 18px",paddingBottom:170}}>
       <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start",marginBottom:20}}>
         <div><h2 style={{fontFamily:"'Clash Display',sans-serif",fontSize:26,fontWeight:700,marginBottom:4}}>Hábitos 🔥</h2><p style={{fontSize:12,color:C.muted}}>Construa sua melhor versão</p></div>
         <Btn onClick={()=>setShow(true)} variant="ghost" sm>+ Novo</Btn>
@@ -926,7 +926,7 @@ function Settings({profile,onUpdateProfile}){
   };
   const IBtnStyle=(active,color)=>({flex:1,padding:10,borderRadius:11,border:"none",cursor:"pointer",fontFamily:"inherit",transition:"all .2s",background:active?"rgba(250,204,21,.12)":"transparent",color:active?C.yellow:C.muted,fontWeight:active?800:400,fontSize:10,borderBottom:active?"2px solid #facc15":"2px solid transparent"});
   return(
-    <div style={{padding:"22px 18px",paddingBottom:110}}>
+    <div style={{padding:"22px 18px",paddingBottom:170}}>
       <div style={{marginBottom:20}}><h2 style={{fontFamily:"'Clash Display',sans-serif",fontSize:26,fontWeight:700,marginBottom:4}}>Configurações ⚙️</h2><p style={{fontSize:12,color:C.muted}}>Perfil, metas e integrações</p></div>
       <div style={{display:"flex",background:"#12121a",borderRadius:14,padding:4,marginBottom:20,gap:3}}>
         {[{id:"perfil",l:"Perfil"},{id:"metas",l:"Metas"},{id:"integ",l:"Watch"},{id:"dados",l:"Dados"}].map(t=><button key={t.id} onClick={()=>setSub(t.id)} style={IBtnStyle(sub===t.id)}>{t.l}</button>)}
