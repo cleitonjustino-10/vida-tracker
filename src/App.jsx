@@ -7,7 +7,7 @@ async function sbq(m,t,b=null,q=""){
   const x=await r.text();if(!r.ok)throw new Error(x);return x?JSON.parse(x):null;
 }
 const DB={get:(t,q="")=>sbq("GET",t,null,q),post:(t,b)=>sbq("POST",t,b),patch:(t,q,b)=>sbq("PATCH",t,b,q),del:(t,q)=>sbq("DELETE",t,null,q)};
-const getAK=()=>localStorage.getItem("anthropic_key")||"";
+const getAK=()=>localStorage.getItem("anthropic_key")||import.meta.env.VITE_ANTHROPIC_KEY||"";
 async function callAI(msgs,sys="",max=1000){
   const r=await fetch("https://api.anthropic.com/v1/messages",{method:"POST",headers:{"Content-Type":"application/json","x-api-key":getAK(),"anthropic-version":"2023-06-01","anthropic-dangerous-direct-browser-access":"true"},body:JSON.stringify({model:"claude-sonnet-4-6",max_tokens:max,system:sys,messages:msgs})});
   const d=await r.json();if(d.error)throw new Error(d.error.message);return d.content?.map(b=>b.text||"").join("")||"";
