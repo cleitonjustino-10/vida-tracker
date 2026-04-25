@@ -7,12 +7,13 @@ async function sbq(m,t,b=null,q=""){
   const x=await r.text();if(!r.ok)throw new Error(x);return x?JSON.parse(x):null;
 }
 const DB={get:(t,q="")=>sbq("GET",t,null,q),post:(t,b)=>sbq("POST",t,b),patch:(t,q,b)=>sbq("PATCH",t,b,q),del:(t,q)=>sbq("DELETE",t,null,q)};
+const getAK=()=>localStorage.getItem("anthropic_key")||"";
 async function callAI(msgs,sys="",max=1000){
-  const r=await fetch("https://api.anthropic.com/v1/messages",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({model:"claude-sonnet-4-20250514",max_tokens:max,system:sys,messages:msgs})});
+  const r=await fetch("https://api.anthropic.com/v1/messages",{method:"POST",headers:{"Content-Type":"application/json","x-api-key":getAK(),"anthropic-version":"2023-06-01","anthropic-dangerous-direct-browser-access":"true"},body:JSON.stringify({model:"claude-sonnet-4-6",max_tokens:max,system:sys,messages:msgs})});
   const d=await r.json();if(d.error)throw new Error(d.error.message);return d.content?.map(b=>b.text||"").join("")||"";
 }
 async function callVision(b64,mime,prompt){
-  const r=await fetch("https://api.anthropic.com/v1/messages",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({model:"claude-sonnet-4-20250514",max_tokens:1500,system:"Retorne APENAS JSON válido sem markdown.",messages:[{role:"user",content:[{type:"image",source:{type:"base64",media_type:mime,data:b64}},{type:"text",text:prompt}]}]})});
+  const r=await fetch("https://api.anthropic.com/v1/messages",{method:"POST",headers:{"Content-Type":"application/json","x-api-key":getAK(),"anthropic-version":"2023-06-01","anthropic-dangerous-direct-browser-access":"true"},body:JSON.stringify({model:"claude-sonnet-4-6",max_tokens:1500,system:"Retorne APENAS JSON válido sem markdown.",messages:[{role:"user",content:[{type:"image",source:{type:"base64",media_type:mime,data:b64}},{type:"text",text:prompt}]}]})});
   const d=await r.json();const txt=d.content?.map(b=>b.text||"").join("")||"{}";
   try{return JSON.parse(txt.replace(/```json|```/g,"").trim());}catch{return null;}
 }
@@ -784,7 +785,7 @@ function Health({profile,weights,compositions,onAddWeight,onAddComp,onDeleteWeig
       try{
         let r;
         if(isPdf){
-          const res=await fetch("https://api.anthropic.com/v1/messages",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({model:"claude-sonnet-4-20250514",max_tokens:1500,system:"Retorne APENAS JSON válido sem markdown.",messages:[{role:"user",content:[{type:"document",source:{type:"base64",media_type:"application/pdf",data:b64}},{type:"text",text:ep}]}]})});
+          const res=await fetch("https://api.anthropic.com/v1/messages",{method:"POST",headers:{"Content-Type":"application/json","x-api-key":getAK(),"anthropic-version":"2023-06-01","anthropic-dangerous-direct-browser-access":"true"},body:JSON.stringify({model:"claude-sonnet-4-6",max_tokens:1500,system:"Retorne APENAS JSON válido sem markdown.",messages:[{role:"user",content:[{type:"document",source:{type:"base64",media_type:"application/pdf",data:b64}},{type:"text",text:ep}]}]})});
           const d=await res.json();const txt=d.content?.map(b=>b.text||"").join("")||"{}";
           try{r=JSON.parse(txt.replace(/```json|```/g,"").trim());}catch{r=null;}
         }else{
@@ -1190,6 +1191,8 @@ function Settings({profile,onUpdateProfile}){
   const [showReset,setShowReset]=useState(false);
   const [motivo,setMotivo]=useState("");
   const [showPausaForm,setShowPausaForm]=useState(false);
+  const [apiKey,setApiKey]=useState(()=>localStorage.getItem("anthropic_key")||"");
+  const [apiKeySaved,setApiKeySaved]=useState(false);
   useEffect(()=>{DB.get("configuracoes","?chave=eq.webhook_url").then(r=>{if(r?.[0]?.valor)setWebhook(r[0].valor);}).catch(()=>{});}, []);
   const save=async()=>{
     setSaving(true);
@@ -1235,6 +1238,17 @@ function Settings({profile,onUpdateProfile}){
       )}
       {sub==="integ"&&(
         <>
+          <Card style={{marginBottom:16,background:apiKey?"rgba(74,222,128,.06)":"rgba(251,191,36,.06)",border:apiKey?`1px solid rgba(74,222,128,.2)`:`1px solid rgba(251,191,36,.2)`}}>
+            <div style={{display:"flex",alignItems:"center",gap:12,marginBottom:14}}>
+              <div style={{width:40,height:40,borderRadius:12,background:"rgba(251,191,36,.15)",display:"flex",alignItems:"center",justifyContent:"center",fontSize:20}}>🤖</div>
+              <div>
+                <p style={{fontSize:14,fontWeight:700,marginBottom:2}}>Claude IA — API Key</p>
+                <p style={{fontSize:11,color:apiKey?C.green:C.orange}}>{apiKey?"✓ Configurada":"⚠ Necessária para análises por foto e Coach IA"}</p>
+              </div>
+            </div>
+            <input type="password" value={apiKey} onChange={e=>setApiKey(e.target.value)} placeholder="sk-ant-api03-..." style={{width:"100%",background:"rgba(255,255,255,.05)",border:"1.5px solid rgba(255,255,255,.1)",borderRadius:10,padding:"11px 14px",color:"#fff",fontSize:13,outline:"none",fontFamily:"inherit",marginBottom:10}}/>
+            <Btn onClick={()=>{localStorage.setItem("anthropic_key",apiKey);setApiKeySaved(true);setTimeout(()=>setApiKeySaved(false),2000);}} variant={apiKey?"green":"primary"} full>{apiKeySaved?"✓ Salva!":"Salvar API Key"}</Btn>
+          </Card>
           <Card style={{marginBottom:16}}>
             <div style={{display:"flex",alignItems:"center",gap:12,marginBottom:14}}>
               <div style={{width:40,height:40,borderRadius:12,background:"rgba(96,165,250,.15)",display:"flex",alignItems:"center",justifyContent:"center",fontSize:20}}>⌚</div>
@@ -1372,7 +1386,7 @@ export default function App(){
     await DB.patch("perfil",`?id=eq.${profile.id}`,{xp:n});
     setProfile(p=>({...p,xp:n}));
   };
-  const addMeal=async(data)=>{try{const [s]=await DB.post("refeicoes",data);setMeals(m=>[s,...m]);await updXP(15);}catch(e){console.error(e);}};
+  const addMeal=async(data)=>{try{const [s]=await DB.post("refeicoes",data);setMeals(m=>[s,...m]);await updXP(15);}catch(e){console.error(e);alert("Erro ao salvar refeição: "+e.message);}};
   const delMeal=async(id)=>{try{await DB.del("refeicoes",`?id=eq.${id}`);setMeals(m=>m.filter(x=>x.id!==id));}catch(e){console.error(e);}};
   const addTraining=async(data)=>{try{const [s]=await DB.post("treinos",data);setTrainings(t=>[s,...t]);await updXP(data.xp||25);}catch(e){console.error(e);}};
   const delTraining=async(id)=>{try{await DB.del("treinos",`?id=eq.${id}`);setTrainings(t=>t.filter(x=>x.id!==id));}catch(e){console.error(e);}};
