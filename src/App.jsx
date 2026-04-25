@@ -39,14 +39,14 @@ const MODALITIES=[
 ];
 
 const MEAL_TYPES=[
-  {id:"cafe",label:"☕ Café da manhã",color:"#f59e0b"},
-  {id:"lanche_m",label:"🍎 Lanche manhã",color:"#4ade80"},
-  {id:"almoco",label:"🍽️ Almoço",color:"#60a5fa"},
-  {id:"lanche_t",label:"🥤 Lanche tarde",color:"#a78bfa"},
-  {id:"jantar",label:"🌙 Jantar",color:"#fb923c"},
-  {id:"ceia",label:"🌛 Ceia",color:"#f87171"},
-  {id:"pre_treino",label:"⚡ Pré-treino",color:"#facc15"},
-  {id:"pos_treino",label:"💪 Pós-treino",color:"#34d399"},
+  {id:"cafe",label:"☕ Café da manhã",color:"#f59e0b",horario:"07:00–09:00"},
+  {id:"lanche_m",label:"🍎 Lanche manhã",color:"#4ade80",horario:"10:00–11:00"},
+  {id:"almoco",label:"🍽️ Almoço",color:"#60a5fa",horario:"12:00–14:00"},
+  {id:"lanche_t",label:"🥤 Lanche tarde",color:"#a78bfa",horario:"15:00–16:30"},
+  {id:"jantar",label:"🌙 Jantar",color:"#fb923c",horario:"19:00–21:00"},
+  {id:"ceia",label:"🌛 Ceia",color:"#f87171",horario:"21:00–22:00"},
+  {id:"pre_treino",label:"⚡ Pré-treino",color:"#facc15",horario:"60min antes"},
+  {id:"pos_treino",label:"💪 Pós-treino",color:"#34d399",horario:"até 60min após"},
 ];
 
 const CATS={mente:{color:"#a78bfa",label:"Mente"},corpo:{color:"#4ade80",label:"Corpo"},disciplina:{color:"#fb923c",label:"Disciplina"},carreira:{color:"#60a5fa",label:"Carreira"}};
@@ -169,6 +169,8 @@ function Onboarding({onSave}){
 // DASHBOARD
 function Dashboard({profile,meals,weights,checkins,habits,trainings,onTab}){
   const [insight,setInsight]=useState("");
+  const [plateauAnalysis,setPlateauAnalysis]=useState("");
+  const [loadingPlateau,setLoadingPlateau]=useState(false);
   const tk=todayStr(),tm=meals.filter(m=>m.data===tk);
   const cal=tm.reduce((s,m)=>s+(m.calorias||0),0),prot=tm.reduce((s,m)=>s+(m.proteina||0),0);
   const ctd=checkins.filter(c=>c.data===tk);
@@ -181,6 +183,22 @@ function Dashboard({profile,meals,weights,checkins,habits,trainings,onTab}){
     callAI([{role:"user",content:`${profile.nome}, ${lw}kg (meta ${profile.peso_meta}kg), proteína ${prot}/${profile.prot_meta}g, hábitos ${ctd.length}/${habits.length}. Objetivo Ultraman. 2 frases motivacionais.`}],"Coach Paulo Musy + Renato Cariani. Português direto.",160)
       .then(setInsight).catch(()=>setInsight("Foco total. Cada treino te aproxima do Ultraman."));
   },[]);
+  const d14=new Date();d14.setDate(d14.getDate()-14);
+  const recentW=weights.filter(w=>new Date(w.data+"T12:00:00")>=d14);
+  const isPlateauActive=recentW.length>=2&&(Math.max(...recentW.map(w=>w.peso))-Math.min(...recentW.map(w=>w.peso)))<0.5;
+  const plateauDays=isPlateauActive?Math.round((new Date()-new Date(recentW[recentW.length-1].data+"T12:00:00"))/86400000):0;
+  const hour=new Date().getHours();
+  const showProtAlert=prot<(profile.prot_meta*0.7)&&hour>=14;
+  const protRestante=(profile.prot_meta||0)-prot;
+  const analyzePlateau=async()=>{
+    setLoadingPlateau(true);
+    const d7=new Date();d7.setDate(d7.getDate()-7);
+    const avgProt=Math.round(meals.filter(m=>new Date(m.data+"T12:00:00")>=d7).reduce((s,m)=>s+(m.proteina||0),0)/7);
+    const weekTrainings=trainings.filter(t=>new Date(t.data+"T12:00:00")>=d7).length;
+    try{const r=await callAI([{role:"user",content:`Cleiton está em plateau há ${plateauDays} dias. Peso atual: ${lw}kg. Meta: ${profile.peso_meta}kg. Proteína média dos últimos 7 dias: ${avgProt}g (meta: ${profile.prot_meta}g). Treinos na última semana: ${weekTrainings}. Analise as 4 causas mais prováveis do plateau nesse caso específico e dê uma ação concreta para cada causa. Seja direto, sem enrolação.`}],"Você é o Coach IA com personalidade de Paulo Musy e Renato Cariani. Seja direto e prático.",1000);setPlateauAnalysis(r);}
+    catch{setPlateauAnalysis("Erro ao analisar. Tente novamente.");}
+    setLoadingPlateau(false);
+  };
   return(
     <div style={{padding:"22px 18px",paddingBottom:110}}>
       <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:22}}>
@@ -205,10 +223,31 @@ function Dashboard({profile,meals,weights,checkins,habits,trainings,onTab}){
           </Card>
         ))}
       </div>
+      {showProtAlert&&(
+        <div style={{background:"rgba(167,139,250,0.1)",border:"1px solid rgba(167,139,250,0.3)",borderRadius:16,padding:16,marginBottom:14}}>
+          <div style={{display:"flex",alignItems:"center",gap:10,marginBottom:8}}>
+            <span style={{fontSize:22}}>💪</span>
+            <p style={{fontSize:13,fontWeight:700,color:C.purple}}>Proteína em risco — só {prot}g de {profile.prot_meta}g hoje</p>
+          </div>
+          <p style={{fontSize:11,color:C.muted,marginBottom:12}}>Você precisa de {protRestante}g nas próximas refeições para proteger o músculo.</p>
+          <div style={{display:"flex",gap:8,flexWrap:"wrap"}}>
+            {["🥚 4 ovos mexidos = ~24g proteína","🍗 150g peito frango = ~46g proteína","🥛 1 dose whey = ~25g proteína"].map((s,i)=>(
+              <span key={i} style={{background:"rgba(167,139,250,0.15)",borderRadius:20,padding:"6px 12px",fontSize:11,color:C.purple}}>{s}</span>
+            ))}
+          </div>
+        </div>
+      )}
       <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:10,marginBottom:14}}>
         <Card><p style={{fontSize:9,color:C.dim,letterSpacing:".12em",textTransform:"uppercase",marginBottom:8}}>Peso atual</p><p style={{fontFamily:"'Clash Display',sans-serif",fontSize:28,fontWeight:700,color:C.yellow,marginBottom:4}}>{lw}<span style={{fontSize:13,color:C.muted}}> kg</span></p><Badge color={C.green}>-{lost.toFixed(1)}kg perdidos</Badge></Card>
         <Card><p style={{fontSize:9,color:C.dim,letterSpacing:".12em",textTransform:"uppercase",marginBottom:8}}>Para a meta</p><p style={{fontFamily:"'Clash Display',sans-serif",fontSize:28,fontWeight:700,color:C.blue,marginBottom:4}}>{Math.max(0,(lw||0)-(profile.peso_meta||0)).toFixed(1)}<span style={{fontSize:13,color:C.muted}}> kg</span></p><Bar value={lost} max={(profile.peso||0)-(profile.peso_meta||0)} color={C.green} h={4}/></Card>
       </div>
+      {isPlateauActive&&(
+        <div style={{background:"rgba(251,146,60,0.1)",border:"1px solid rgba(251,146,60,0.3)",borderRadius:16,padding:16,marginBottom:14}}>
+          <p style={{fontSize:13,fontWeight:700,color:"rgba(251,146,60,1)",marginBottom:12}}>⚠️ Plateau detectado — {plateauDays} dias sem variação</p>
+          <Btn onClick={analyzePlateau} disabled={loadingPlateau} full>{loadingPlateau?"Analisando...":"Analisar com Coach IA"}</Btn>
+          {plateauAnalysis&&<p style={{fontSize:13,color:"rgba(255,255,255,0.7)",lineHeight:1.7,marginTop:12,whiteSpace:"pre-line"}}>{plateauAnalysis}</p>}
+        </div>
+      )}
       <div style={{background:"linear-gradient(135deg,rgba(250,204,21,.07),rgba(250,204,21,.02))",border:"1px solid rgba(250,204,21,.18)",borderRadius:18,padding:16,marginBottom:14,position:"relative",overflow:"hidden"}}>
         <div style={{position:"absolute",top:0,left:0,right:0,height:2,background:"linear-gradient(90deg,transparent,#facc15,transparent)"}}/>
         <div style={{display:"flex",gap:12,alignItems:"flex-start"}}>
@@ -429,6 +468,7 @@ function Nutrition({profile,meals,onAdd,onDelete}){
             {mt&&<Badge color={mt.color} style={{fontSize:8}}>{mt.label}</Badge>}
           </div>
           <p style={{fontSize:11,color:C.muted}}>{m.hora} · <span style={{color:C.yellow}}>{m.calorias}kcal</span> · <span style={{color:C.purple}}>{m.proteina}g prot</span></p>
+          {mt&&<p style={{fontSize:10,color:C.dim,marginTop:2}}>{mt.label}{mt.horario?` · ${mt.horario}`:""}</p>}
         </div>
         <DelBtn onClick={()=>onDelete(m.id)}/>
       </Card>
@@ -451,9 +491,19 @@ function Nutrition({profile,meals,onAdd,onDelete}){
               </div>
             ))}
           </Card>
+          {dayMeals.length>0&&(
+            <div style={{display:"flex",gap:6,flexWrap:"wrap",marginBottom:14}}>
+              {MEAL_TYPES.filter(t=>dayMeals.some(m=>m.tipo_refeicao===t.id)).map(t=>{
+                const count=dayMeals.filter(m=>m.tipo_refeicao===t.id).length;
+                return<span key={t.id} style={{background:`${t.color}20`,borderRadius:20,padding:"5px 10px",fontSize:11,color:t.color}}>{t.label.slice(0,2)} {count}</span>;
+              })}
+            </div>
+          )}
           <FIn label="Ver outro dia" type="date" value={selDate} onChange={v=>{setSelDate(v);setMealDate(v);}}/>
           <SLbl mt={4}>Refeições — {fmt(selDate)}</SLbl>
-          {dayMeals.length===0?<div style={{textAlign:"center",padding:"24px 0",color:C.dim}}><p style={{fontSize:28,marginBottom:8}}>🍽️</p><p style={{fontSize:13}}>Nenhuma refeição neste dia</p><p style={{fontSize:11,marginTop:4}}>Use "TACO 🇧🇷" ou "Foto IA"</p></div>:dayMeals.map(m=><MealCard key={m.id} m={m}/>)}
+          {dayMeals.length===0?<div style={{textAlign:"center",padding:"24px 0",color:C.dim}}><p style={{fontSize:28,marginBottom:8}}>🍽️</p><p style={{fontSize:13}}>Nenhuma refeição neste dia</p><p style={{fontSize:11,marginTop:4}}>Use "TACO 🇧🇷" ou "Foto IA"</p></div>:
+            MEAL_TYPES.map(t=>{const group=dayMeals.filter(m=>m.tipo_refeicao===t.id);if(!group.length)return null;return(<div key={t.id}><p style={{fontSize:10,letterSpacing:".15em",textTransform:"uppercase",color:t.color,marginTop:16,marginBottom:8,fontWeight:700}}>{t.label}{t.horario?` · ${t.horario}`:""}</p>{group.map(m=><MealCard key={m.id} m={m}/>)}</div>);})
+          }
         </>
       )}
 
@@ -947,6 +997,47 @@ function Settings({profile,onUpdateProfile}){
   );
 }
 
+function CheckinSemanal({profile,weights,meals,onClose}){
+  const [respostas,setRespostas]=useState({});
+  const [analise,setAnalise]=useState("");
+  const [loading,setLoading]=useState(false);
+  const lw=weights[0]?.peso||profile?.peso;
+  const d7=new Date();d7.setDate(d7.getDate()-7);
+  const avgProt=Math.round(meals.filter(m=>new Date(m.data+"T12:00:00")>=d7).reduce((s,m)=>s+(m.proteina||0),0)/7);
+  const perguntas=[
+    {id:"p1",q:"Como foi sua semana de treinos?",opts:["😴 Fraca","😐 Regular","💪 Boa","🔥 Incrível"]},
+    {id:"p2",q:"Como foi sua alimentação?",opts:["😴 Fugi muito","😐 Mais ou menos","✅ No plano","🎯 Perfeito"]},
+    {id:"p3",q:"Como foi seu sono?",opts:["😫 Péssimo","😐 Regular","😴 Bom","⭐ Ótimo"]},
+    {id:"p4",q:"Seu nível de energia geral?",opts:["🪫 Sem energia","😐 Ok","⚡ Bem disposto","🚀 No máximo"]},
+    {id:"p5",q:"Algo que travou sua semana?",opts:["Trabalho","Lesão","Falta de tempo","Motivação","Nada travou"]},
+  ];
+  const allAnswered=perguntas.every(p=>respostas[p.id]);
+  const gerar=async()=>{
+    setLoading(true);
+    try{const r=await callAI([{role:"user",content:`Check-in semanal do Cleiton:\n- Treinos: ${respostas.p1}\n- Alimentação: ${respostas.p2}\n- Sono: ${respostas.p3}\n- Energia: ${respostas.p4}\n- O que travou: ${respostas.p5}\n- Peso atual: ${lw}kg (meta ${profile?.peso_meta}kg)\n- Proteína média da semana: ${avgProt}g/${profile?.prot_meta}g\nDê um diagnóstico honesto da semana e 1 foco prioritário para a próxima semana.`}],"Coach de alta performance, Paulo Musy + Renato Cariani. Português direto e motivador. Máximo 4 frases.",400);setAnalise(r);}
+    catch{setAnalise("Erro. Tente novamente.");}
+    setLoading(false);
+  };
+  const fechar=()=>{localStorage.setItem("lastCheckin",todayStr());onClose();};
+  return(
+    <Sheet title="📋 Check-in Semanal" subtitle="Leva 2 minutos. Faz toda diferença." onClose={fechar}>
+      {perguntas.map(p=>(
+        <div key={p.id} style={{marginBottom:20}}>
+          <p style={{fontSize:13,fontWeight:700,marginBottom:10}}>{p.q}</p>
+          <div style={{display:"flex",flexWrap:"wrap",gap:8}}>
+            {p.opts.map(o=>{const sel=respostas[p.id]===o;return(
+              <button key={o} onClick={()=>setRespostas(r=>({...r,[p.id]:o}))} style={{padding:"8px 14px",borderRadius:20,border:sel?`1.5px solid ${C.yellow}`:"1.5px solid rgba(255,255,255,.1)",background:sel?"rgba(250,204,21,0.2)":"transparent",color:sel?C.yellow:C.muted,fontSize:11,fontWeight:sel?700:400,cursor:"pointer",fontFamily:"inherit"}}>{o}</button>
+            );})}
+          </div>
+        </div>
+      ))}
+      <Btn onClick={gerar} full disabled={!allAnswered||loading} style={{marginBottom:analise?12:0}}>{loading?"Analisando...":"Gerar análise da semana"}</Btn>
+      {analise&&<p style={{fontSize:13,color:"rgba(255,255,255,0.7)",lineHeight:1.7,marginTop:12,whiteSpace:"pre-line"}}>{analise}</p>}
+      <Btn onClick={fechar} full variant="ghost" style={{marginTop:16}}>Fechar e salvar</Btn>
+    </Sheet>
+  );
+}
+
 // APP ROOT
 export default function App(){
   const [loading,setLoading]=useState(true);
@@ -958,6 +1049,7 @@ export default function App(){
   const [weights,setWeights]=useState([]);
   const [compositions,setCompositions]=useState([]);
   const [tab,setTab]=useState("home");
+  const [showCheckin,setShowCheckin]=useState(false);
 
   const loadAll=useCallback(async()=>{
     try{
@@ -976,7 +1068,11 @@ export default function App(){
     setLoading(false);
   },[]);
 
-  useEffect(()=>{loadAll();},[]);
+  useEffect(()=>{
+    loadAll();
+    const day=new Date().getDay(),h=new Date().getHours(),last=localStorage.getItem("lastCheckin");
+    if(day===0&&h>=18&&last!==todayStr())setTimeout(()=>setShowCheckin(true),2000);
+  },[]);
 
   const updXP=async(d)=>{
     if(!profile)return;const n=(profile.xp||0)+d;
@@ -1033,6 +1129,7 @@ export default function App(){
         button:active{transform:scale(.97);}
       `}</style>
       <div style={{position:"relative",zIndex:1}}>{pages[tab]||pages.home}</div>
+      {showCheckin&&<CheckinSemanal profile={profile} weights={weights} meals={meals} onClose={()=>setShowCheckin(false)}/>}
       <div style={{position:"fixed",bottom:0,left:"50%",transform:"translateX(-50%)",width:"100%",maxWidth:520,background:"rgba(10,10,15,.97)",backdropFilter:"blur(24px)",borderTop:`1px solid ${C.border}`,zIndex:100}}>
         <div style={{display:"flex",padding:`8px 2px max(20px,env(safe-area-inset-bottom,20px))`}}>
           {TABS.map(t=>(
