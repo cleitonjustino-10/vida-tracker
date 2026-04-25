@@ -192,6 +192,14 @@ function Dashboard({profile,meals,weights,checkins,habits,trainings,onTab}){
   const lw=weights[0]?.peso||profile.peso,lost=Math.max(0,(profile.peso||0)-(lw||0));
   const days=Math.max(1,Math.floor((new Date()-new Date(profile.data_criacao||tk))/86400000)+1);
   const week=Array.from({length:7},(_,i)=>{const d=new Date();d.setDate(d.getDate()-6+i);const k=d.toISOString().slice(0,10);return{k,dw:["D","S","T","Q","Q","S","S"][d.getDay()],cal:meals.filter(m=>m.data===k).reduce((s,m)=>s+(m.calorias||0),0),tr:trainings.some(t=>t.data===k),today:k===tk};});
+  const treinouHoje=trainings.some(t=>t.data===tk);
+  const calCiclo=treinouHoje?Math.round((profile.cal_meta||2800)*1.1):Math.round((profile.cal_meta||2800)*0.9);
+  const calDiff=calCiclo-(profile.cal_meta||2800);
+  const tipoCiclo=treinouHoje?"treino":"descanso";
+  const pausaAtiva=localStorage.getItem("pausa_ativa")==="true";
+  const pausaMotivo=localStorage.getItem("pausa_motivo");
+  const pausaInicio=localStorage.getItem("pausa_inicio");
+  const pausaDias=pausaInicio?Math.floor((new Date()-new Date(pausaInicio))/86400000):0;
   useEffect(()=>{
     const cached=localStorage.getItem("dashInsight"),cachedDate=localStorage.getItem("dashInsightDate");
     if(cached&&cachedDate===todayStr()){setInsight(cached);return;}
@@ -224,6 +232,7 @@ function Dashboard({profile,meals,weights,checkins,habits,trainings,onTab}){
         <div><p style={{fontSize:11,color:C.dim,letterSpacing:".1em",textTransform:"uppercase",marginBottom:4}}>Dia {days} · Jornada Ultraman</p><h1 style={{fontFamily:"'Clash Display',sans-serif",fontSize:30,fontWeight:700,lineHeight:1.1}}>Olá, <span style={{color:C.yellow}}>{profile.nome?.split(" ")[0]}</span> 💪</h1></div>
         <Ring value={days} max={180} size={58} sw={5} color={C.yellow}><span style={{fontSize:10,fontWeight:900,color:C.yellow}}>{Math.round((days/180)*100)}%</span></Ring>
       </div>
+      {pausaAtiva&&<div style={{background:"rgba(251,146,60,0.1)",border:"1px solid rgba(251,146,60,0.3)",borderRadius:16,padding:14,marginBottom:16}}><div style={{display:"flex",justifyContent:"space-between",alignItems:"center"}}><div><p style={{fontSize:13,fontWeight:700,color:C.orange,marginBottom:3}}>⏸️ Modo pausa ativo — {pausaDias} dias</p><p style={{fontSize:11,color:C.muted}}>{pausaMotivo} · Sem cobrança de hábitos</p></div><button onClick={()=>onTab("settings")} style={{background:"rgba(251,146,60,0.2)",border:"1px solid rgba(251,146,60,0.4)",borderRadius:10,padding:"8px 12px",color:C.orange,fontSize:11,fontWeight:800,cursor:"pointer",fontFamily:"inherit"}}>Retomar</button></div></div>}
       <div style={{display:"flex",alignItems:"center",gap:12,marginBottom:20,padding:"12px 16px",background:C.card,borderRadius:16,boxShadow:"0 2px 8px rgba(0,0,0,.3)"}}>
         <div style={{width:28,height:28,borderRadius:9,background:"linear-gradient(135deg,#fbbf24,#f59e0b)",display:"flex",alignItems:"center",justifyContent:"center",fontSize:12,fontWeight:900,color:"#000",flexShrink:0}}>{lvl}</div>
         <div style={{flex:1}}>
@@ -235,7 +244,7 @@ function Dashboard({profile,meals,weights,checkins,habits,trainings,onTab}){
         </div>
       </div>
       <div style={{display:"grid",gridTemplateColumns:"1fr 1fr 1fr",gap:12,marginBottom:20}}>
-        {[{v:cal,max:profile.cal_meta||2800,c:C.yellow,l:"KCAL",s:`/${profile.cal_meta}`},{v:prot,max:profile.prot_meta||336,c:C.green,l:"PROT",s:`/${profile.prot_meta}g`},{v:ctd.length,max:habits.length||1,c:C.yellow,l:"HÁBITOS",s:`/${habits.length}`}].map((r,i)=>(
+        {[{v:cal,max:calCiclo,c:C.yellow,l:"KCAL",s:`/${calCiclo}`},{v:prot,max:profile.prot_meta||336,c:C.green,l:"PROT",s:`/${profile.prot_meta}g`},{v:ctd.length,max:habits.length||1,c:C.yellow,l:"HÁBITOS",s:`/${habits.length}`}].map((r,i)=>(
           <Card key={i} style={{padding:"16px 10px",display:"flex",flexDirection:"column",alignItems:"center",gap:10}}>
             <Ring value={r.v} max={r.max} size={56} sw={5} color={r.c}><span style={{fontSize:11,fontWeight:900,color:r.c}}>{r.v}</span></Ring>
             <p style={{fontSize:9,color:C.dim,letterSpacing:".1em",textAlign:"center"}}>{r.l}<br/><span style={{color:C.muted,fontSize:10}}>{r.s}</span></p>
@@ -271,8 +280,19 @@ function Dashboard({profile,meals,weights,checkins,habits,trainings,onTab}){
         <div style={{position:"absolute",top:0,left:0,right:0,height:2,background:"linear-gradient(90deg,transparent,rgba(251,191,36,.5),transparent)"}}/>
         <div style={{display:"flex",gap:14,alignItems:"flex-start"}}>
           <div style={{width:38,height:38,borderRadius:12,background:"rgba(251,191,36,.1)",display:"flex",alignItems:"center",justifyContent:"center",fontSize:18,flexShrink:0}}>🧠</div>
-          <div style={{flex:1}}><p style={{fontSize:10,letterSpacing:".16em",textTransform:"uppercase",color:C.yellow,fontWeight:700,marginBottom:8}}>Coach IA · Musy + Cariani</p>{insight?<p style={{fontSize:14,color:"rgba(255,255,255,.75)",lineHeight:1.75}}>{insight}</p>:<Spin text="Gerando insight"/>}</div>
+          <div style={{flex:1}}><p style={{fontSize:10,letterSpacing:".16em",textTransform:"uppercase",color:C.yellow,fontWeight:700,marginBottom:8}}>Coach IA · Musy + Cariani</p>{insight?<p style={{fontSize:14,color:"rgba(255,255,255,.75)",lineHeight:1.75}}>{insight}</p>:<Spin text="Gerando insight"/>}{insight&&<div style={{marginTop:12,paddingTop:12,borderTop:"1px solid rgba(255,255,255,0.06)",display:"flex",gap:6,flexWrap:"wrap"}}>{[{l:"📊 Estou em plateau",prompt:"plateau"},{l:"🍽️ Vou comer fora",prompt:"comer_fora"},{l:"📋 Plano da semana",prompt:"plano_semana"},{l:"💪 Proteger músculo",prompt:"proteger_musculo"}].map(acao=><button key={acao.prompt} onClick={async()=>{setInsight("...");const lw=weights[0]?.peso||profile?.peso;const last7=meals.filter(m=>new Date()-new Date(m.data)<=7*86400000);const avgProt=last7.length>0?Math.round(last7.reduce((s,m)=>s+(m.proteina||0),0)/7):0;const wkTrain=trainings.filter(t=>new Date()-new Date(t.data)<7*86400000).length;const prompts={plateau:`Cleiton, ${lw}kg (meta ${profile.peso_meta}kg), proteína média ${avgProt}g/${profile.prot_meta}g, ${wkTrain} treinos essa semana. Está em plateau. Dê 3 ações concretas e diretas para quebrar o plateau agora.`,comer_fora:`Cleiton vai comer fora hoje. Meta calórica: ${profile.cal_meta}kcal. Proteína meta: ${profile.prot_meta}g. Já consumiu hoje: ${cal}kcal e ${prot}g de proteína. Dê uma estratégia prática: o que pedir, o que evitar e como compensar no restante do dia.`,plano_semana:`Crie um plano objetivo para Cleiton essa semana. Peso: ${lw}kg, meta: ${profile.peso_meta}kg. Treinos na semana passada: ${wkTrain}. Proteína média: ${avgProt}g/${profile.prot_meta}g. Plano com: dias de treino recomendados, meta de proteína diária e 1 ajuste prioritário na alimentação. Seja direto e específico.`,proteger_musculo:`Cleiton está em déficit calórico. Peso: ${lw}kg, ${profile.prot_meta}g de proteína/dia. Proteína média essa semana: ${avgProt}g. Dê 4 estratégias específicas para preservar massa muscular durante o emagrecimento. Foco em prática, não teoria.`};try{const r=await callAI([{role:"user",content:prompts[acao.prompt]}],"Coach Paulo Musy + Renato Cariani. Português direto. Máximo 5 frases.",400);setInsight(r);}catch{setInsight("Erro ao carregar. Tente novamente.");}}} style={{padding:"7px 12px",borderRadius:20,fontSize:11,border:"1px solid rgba(250,204,21,0.25)",background:"rgba(250,204,21,0.08)",color:C.yellow,cursor:"pointer",fontFamily:"inherit",fontWeight:600,whiteSpace:"nowrap",transition:"all 0.2s"}}>{acao.l}</button>)}</div>}</div>
         </div>
+      </div>
+      <div style={{background:treinouHoje?"rgba(74,222,128,0.08)":"rgba(96,165,250,0.08)",border:`1px solid ${treinouHoje?"rgba(74,222,128,0.25)":"rgba(96,165,250,0.25)"}`,borderRadius:16,padding:14,marginBottom:14}}>
+        <div style={{display:"flex",justifyContent:"space-between",alignItems:"center"}}>
+          <div>
+            <p style={{fontSize:11,fontWeight:700,marginBottom:3,color:treinouHoje?C.green:C.blue}}>{treinouHoje?"⚡ Dia de treino":"😴 Dia de descanso"}</p>
+            <p style={{fontSize:13,fontWeight:800,color:treinouHoje?C.green:C.blue}}>Meta ajustada: {calCiclo} kcal</p>
+            <p style={{fontSize:11,color:C.muted,marginTop:2}}>{treinouHoje?`+${calDiff} kcal — carboidratos extras para recuperação`:`${calDiff} kcal — déficit maior no descanso`}</p>
+          </div>
+          <div style={{width:48,height:48,borderRadius:14,flexShrink:0,background:treinouHoje?"rgba(74,222,128,0.15)":"rgba(96,165,250,0.15)",display:"flex",alignItems:"center",justifyContent:"center",fontSize:24}}>{treinouHoje?"🏋️":"🛋️"}</div>
+        </div>
+        {treinouHoje&&<div style={{marginTop:10,paddingTop:10,borderTop:"1px solid rgba(255,255,255,0.06)"}}><p style={{fontSize:11,color:C.muted,lineHeight:1.6}}>💡 Priorize carboidratos na refeição pós-treino para repor glicogênio e proteger o músculo.</p></div>}
       </div>
       <Card style={{marginBottom:20}}>
         <SLbl>Semana — calorias & treinos</SLbl>
@@ -319,6 +339,9 @@ function Training({profile,trainings,onAdd,onDelete}){
   const [filter,setFilter]=useState("all");
   const [date,setDate]=useState(todayStr());
   const [rir,setRir]=useState("");
+  const [planoMensal,setPlanoMensal]=useState("");
+  const [loadPM,setLoadPM]=useState(false);
+  const [showPlanoMensal,setShowPlanoMensal]=useState(false);
 
   const analyze=async()=>{
     setLoadA(true);
@@ -336,6 +359,20 @@ function Training({profile,trainings,onAdd,onDelete}){
     catch{setPlan("Erro. Tente novamente.");}
     setLoadP(false);
   };
+  const genPlanoMensal=async()=>{
+    setLoadPM(true);setShowPlanoMensal(true);
+    const mesPassado=trainings.filter(t=>(new Date()-new Date(t.data))<=30*86400000);
+    const porModalidade=MODALITIES.map(m=>({nome:m.label,total:mesPassado.filter(t=>t.modalidade===m.id).length,minutos:mesPassado.filter(t=>t.modalidade===m.id).reduce((s,t)=>s+(t.duracao||0),0)})).filter(m=>m.total>0);
+    const resumoMes=porModalidade.length>0?porModalidade.map(m=>`${m.nome}: ${m.total}x (${m.minutos}min total)`).join(", "):"Nenhum treino registrado no último mês";
+    const fcArr=mesPassado.filter(t=>t.fc>0);
+    const fcMedia=fcArr.length>0?Math.round(fcArr.reduce((s,t)=>s+t.fc,0)/fcArr.length):null;
+    const rirMedio=mesPassado.filter(t=>t.rir).length>0?mesPassado.filter(t=>t.rir)[0].rir:null;
+    try{
+      const r=await callAI([{role:"user",content:`Crie um plano de treino MENSAL completo para Cleiton.\n\nPERFIL:\n- Peso: ${weights[0]?.peso||profile?.peso}kg\n- Meta: ${profile?.peso_meta}kg\n- Objetivo: Ultraman (10km natação + 421km bike + 84km corrida)\n- Experiência: ${profile?.experiencia||"Intermediário"}\n- Limitações: ${profile?.limitacoes||"Nenhuma reportada"}\n\nMÊS ANTERIOR (últimos 30 dias):\n- Treinos realizados: ${mesPassado.length}\n- Por modalidade: ${resumoMes}${fcMedia?`\n- FC média: ${fcMedia}bpm`:""}${rirMedio?`\n- RIR médio: ${rirMedio}`:""}\n\nPROTOCOLO BASE (Musy + Cariani):\n- Musculação 3x/semana\n- Aeróbico diário (natação prioridade)\n- Tênis sábado (recreação)\n- Progressão gradual\n\nCrie um plano para as 4 semanas do próximo mês:\n- Semana 1: Adaptação/base\n- Semana 2: Progressão\n- Semana 3: Intensificação\n- Semana 4: Deload (redução 40%)\n\nPara cada semana liste:\nSegunda, Terça, Quarta, Quinta, Sexta, Sábado, Domingo\n→ Modalidade | Duração | Intensidade | Foco principal\n\nAo final: 1 objetivo mensurável para o mês.\nFormato limpo, direto. Máximo 400 palavras.`}],"Personal trainer especialista em triathlon e emagrecimento. Protocolo Musy + Cariani. Português.",800);
+      setPlanoMensal(r);
+    }catch{setPlanoMensal("Erro ao gerar plano. Tente novamente.");}
+    setLoadPM(false);
+  };
   const filtered=filter==="all"?trainings:trainings.filter(t=>t.modalidade===filter);
   const weekCount=trainings.filter(t=>new Date()-new Date(t.data)<7*86400000).length;
   return(
@@ -348,10 +385,29 @@ function Training({profile,trainings,onAdd,onDelete}){
       </div>
       <div style={{display:"flex",gap:8,marginBottom:16,marginTop:10}}>
         <Btn onClick={()=>setShow(true)} full>+ Registrar treino</Btn>
-        <Btn onClick={genPlan} variant="ghost" disabled={loadP} style={{flexShrink:0}}>{loadP?"...":"✦ Plano"}</Btn>
+        <Btn onClick={genPlan} variant="ghost" disabled={loadP} style={{flexShrink:0}}>{loadP?"...":"✦ Semana"}</Btn>
+        <Btn onClick={genPlanoMensal} variant="purple" disabled={loadPM} style={{flexShrink:0}}>{loadPM?"...":"📅 Mês"}</Btn>
       </div>
       {loadP&&<Spin text="Gerando plano"/>}
       {plan&&!loadP&&<Card style={{marginBottom:20,background:"rgba(167,139,250,.1)",border:"1px solid rgba(167,139,250,.2)"}}><p style={{fontSize:9,letterSpacing:".18em",textTransform:"uppercase",color:C.purple,marginBottom:12,fontWeight:800}}>✦ Plano Semanal</p><p style={{fontSize:12,color:"rgba(255,255,255,.65)",lineHeight:1.85,whiteSpace:"pre-line"}}>{plan}</p></Card>}
+      {showPlanoMensal&&(
+        <Card style={{marginBottom:20,background:"rgba(167,139,250,0.08)",border:"1px solid rgba(167,139,250,0.25)"}}>
+          <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:12}}>
+            <div>
+              <p style={{fontSize:9,letterSpacing:"0.18em",textTransform:"uppercase",color:C.purple,fontWeight:800,marginBottom:4}}>📅 Plano Mensal · Musy + Cariani</p>
+              <p style={{fontSize:11,color:C.dim}}>Baseado nos seus últimos 30 dias</p>
+            </div>
+            <button onClick={()=>{setShowPlanoMensal(false);setPlanoMensal("");}} style={{background:"rgba(255,255,255,0.07)",border:"none",borderRadius:8,width:28,height:28,cursor:"pointer",color:C.muted,fontSize:13}}>✕</button>
+          </div>
+          {loadPM&&<Spin text="Coach elaborando plano mensal"/>}
+          {planoMensal&&!loadPM&&(
+            <>
+              <p style={{fontSize:12,color:"rgba(255,255,255,0.7)",lineHeight:1.9,whiteSpace:"pre-line",marginBottom:14}}>{planoMensal}</p>
+              <button onClick={()=>{const blob=new Blob([planoMensal],{type:"text/plain;charset=utf-8"});const url=URL.createObjectURL(blob);const a=document.createElement("a");a.href=url;a.download=`plano-treino-${todayStr()}.txt`;a.click();URL.revokeObjectURL(url);}} style={{width:"100%",border:"none",borderRadius:12,padding:"11px",fontSize:12,fontWeight:700,cursor:"pointer",fontFamily:"inherit",background:"rgba(167,139,250,0.15)",color:C.purple}}>⬇ Baixar plano em TXT</button>
+            </>
+          )}
+        </Card>
+      )}
       <div style={{display:"flex",gap:6,overflowX:"auto",paddingBottom:8,marginBottom:16}}>
         {[{id:"all",label:"Todos",color:C.yellow,emoji:"🏅"},...MODALITIES].map(m=>(
           <button key={m.id} onClick={()=>setFilter(m.id)} style={{padding:"6px 14px",borderRadius:20,border:filter===m.id?`1.5px solid ${m.color}`:"1.5px solid rgba(255,255,255,.1)",background:filter===m.id?`${m.color}15`:"transparent",color:filter===m.id?m.color:C.muted,fontSize:11,fontWeight:filter===m.id?700:400,cursor:"pointer",fontFamily:"inherit",whiteSpace:"nowrap"}}>
@@ -488,8 +544,7 @@ function Nutrition({profile,meals,onAdd,onDelete}){
   };
 
   const saveMeal=(data)=>{
-    const mt=MEAL_TYPES.find(t=>t.id===mealType);
-    onAdd({...data,tipo_refeicao:mealType,tipo_label:mt?.label||"Refeição",data:mealDate,hora:fmtNow()});
+    onAdd({...data,tipo:mealType,data:mealDate,hora:fmtNow()});
     setImgRes(null);setImgPrev(null);setTacoSel(null);setTacoQ("");setTacoR([]);
   };
 
@@ -665,6 +720,9 @@ function Health({profile,weights,compositions,onAddWeight,onAddComp,onDeleteWeig
   const [medidas,setMedidas]=useState([]);
   const [loadingMedidas,setLoadingMedidas]=useState(false);
   const [novasMedidas,setNovasMedidas]=useState({});
+  const [marcadoresHist,setMarcadoresHist]=useState([]);
+  const [showMarcadorSheet,setShowMarcadorSheet]=useState(false);
+  const [novoMarcador,setNovoMarcador]=useState({nome:"",valor:"",unidade:"",status:"ok",referencia:""});
   const [wVal,setWVal]=useState(String(weights[0]?.peso||profile?.peso||""));
   const [wDate,setWDate]=useState(todayStr());
   const [xi,setXi]=useState({peso:"",gordura_pct:"",musculo_kg:"",agua_pct:"",proteina_pct:"",gordura_visceral:"",metabolismo_basal:"",massa_ossea:""});
@@ -719,10 +777,21 @@ function Health({profile,weights,compositions,onAddWeight,onAddComp,onDeleteWeig
     setLoadEx(true);
     const reader=new FileReader();
     reader.onload=async(e)=>{
-      const url=e.target.result;setExImg(url);
-      const b64=url.split(",")[1];
-        try{const ep="Analise este exame de sangue. Retorne JSON com: marcadores(array com nome,valor,unidade,referencia,status,interpretacao,recomendacao), resumo, alertas, pontos_positivos, impacto_performance";const r=await callVision(b64,file.type,ep);setExRes(r);}
-      catch{setExRes(null);}
+      const b64=e.target.result.split(",")[1];
+      const isPdf=file.type==="application/pdf";
+      if(!isPdf) setExImg(e.target.result);
+      const ep="Analise este exame de sangue. Retorne JSON com: marcadores(array com nome,valor,unidade,referencia,status,interpretacao,recomendacao), resumo, alertas, pontos_positivos, impacto_performance";
+      try{
+        let r;
+        if(isPdf){
+          const res=await fetch("https://api.anthropic.com/v1/messages",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({model:"claude-sonnet-4-20250514",max_tokens:1500,system:"Retorne APENAS JSON válido sem markdown.",messages:[{role:"user",content:[{type:"document",source:{type:"base64",media_type:"application/pdf",data:b64}},{type:"text",text:ep}]}]})});
+          const d=await res.json();const txt=d.content?.map(b=>b.text||"").join("")||"{}";
+          try{r=JSON.parse(txt.replace(/```json|```/g,"").trim());}catch{r=null;}
+        }else{
+          r=await callVision(b64,file.type,ep);
+        }
+        setExRes(r);
+      }catch{setExRes(null);}
       setLoadEx(false);
     };
     reader.readAsDataURL(file);
@@ -744,6 +813,7 @@ function Health({profile,weights,compositions,onAddWeight,onAddComp,onDeleteWeig
     setLoadingMedidas(false);
   };
   useEffect(()=>{DB.get("medidas_corporais","?order=created_at.desc&limit=20").then(r=>setMedidas(r||[])).catch(()=>{});},[]);
+  useEffect(()=>{DB.get("marcadores_exame","?order=created_at.desc&limit=100").then(r=>setMarcadoresHist(r||[])).catch(()=>{});},[]);
 
   return(
     <div style={{padding:"22px 18px",paddingBottom:170}}>
@@ -819,9 +889,9 @@ function Health({profile,weights,compositions,onAddWeight,onAddComp,onDeleteWeig
             <p style={{fontSize:13,fontWeight:700,marginBottom:6}}>🩸 Exame de Sangue por Foto</p>
             <p style={{fontSize:12,color:C.muted,lineHeight:1.7}}>Tire foto do exame. Claude analisa marcadores e impacto na performance. Exporte o relatório em TXT.</p>
           </div>
-          <input ref={fileExRef} type="file" accept="image/*" style={{display:"none"}} onChange={e=>e.target.files[0]&&analyzeEx(e.target.files[0])}/>
+          <input ref={fileExRef} type="file" accept="image/*,application/pdf" style={{display:"none"}} onChange={e=>e.target.files[0]&&analyzeEx(e.target.files[0])}/>
           <div style={{display:"flex",gap:8,marginBottom:20}}>
-            <Btn onClick={()=>fileExRef.current?.click()} variant="blue" full>📸 Analisar exame</Btn>
+            <Btn onClick={()=>fileExRef.current?.click()} variant="blue" full>📸 Foto ou PDF do exame</Btn>
             {exRes&&<Btn onClick={exportEx} variant="green" style={{flexShrink:0}}>⬇ Exportar</Btn>}
           </div>
           {loadEx&&<Spin text="Claude analisando"/>}
@@ -847,9 +917,12 @@ function Health({profile,weights,compositions,onAddWeight,onAddComp,onDeleteWeig
                   {m.recomendacao&&<p style={{fontSize:11,color:C.blue,lineHeight:1.5}}>💡 {m.recomendacao}</p>}
                 </Card>
               ))}
-              <Btn onClick={()=>{setExRes(null);setExImg(null);}} variant="ghost" full style={{marginTop:8}}>Novo exame</Btn>
+              <Btn onClick={()=>{setExRes(null);setExImg(null);}} variant="ghost" full style={{marginTop:8,marginBottom:8}}>Novo exame</Btn>
+              {exRes?.marcadores&&<Btn onClick={async()=>{try{for(const m of exRes.marcadores){await DB.post("marcadores_exame",{nome:m.nome,valor:parseFloat(m.valor)||null,unidade:m.unidade||"",status:m.status||"ok",referencia:m.referencia||"",data:todayStr(),fonte:"foto_ia"});}const r=await DB.get("marcadores_exame","?order=created_at.desc&limit=100");setMarcadoresHist(r||[]);alert("Marcadores salvos no histórico!");}catch(e){console.error(e);}}} variant="green" full style={{marginBottom:8}}>💾 Salvar marcadores no histórico</Btn>}
             </>
           )}
+          <Btn onClick={()=>setShowMarcadorSheet(true)} variant="ghost" full style={{marginBottom:20}}>+ Adicionar marcador manualmente</Btn>
+          {marcadoresHist.length>0&&(()=>{const nomes=[...new Set(marcadoresHist.map(m=>m.nome))];const prioritarios=["Vitamina B12","Vitamina D","Colesterol Total","HDL","LDL","Triglicerídeos","Glicose","Hemoglobina","Ferritina","TSH"];const ordenados=[...prioritarios.filter(p=>nomes.includes(p)),...nomes.filter(n=>!prioritarios.includes(n))];return(<><SLbl mt={8}>Histórico de marcadores</SLbl>{ordenados.map(nome=>{const registros=marcadoresHist.filter(m=>m.nome===nome).slice(0,6);const ultimo=registros[0];const sC=s=>s==="ok"?C.green:s==="crítico"?C.red:C.orange;return(<Card key={nome} style={{marginBottom:10}}><div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start",marginBottom:8}}><div><p style={{fontSize:13,fontWeight:700,marginBottom:3}}>{nome}</p><p style={{fontFamily:"'Clash Display',sans-serif",fontSize:22,fontWeight:700,color:sC(ultimo.status)}}>{ultimo.valor}<span style={{fontSize:11,color:C.muted,marginLeft:4}}>{ultimo.unidade}</span></p></div><div style={{textAlign:"right"}}><Badge color={sC(ultimo.status)}>{ultimo.status}</Badge><p style={{fontSize:10,color:C.dim,marginTop:4}}>{fmt(ultimo.data)}</p></div></div>{ultimo.referencia&&<p style={{fontSize:10,color:C.dim,marginBottom:8}}>Ref: {ultimo.referencia}</p>}{registros.length>1&&(<><p style={{fontSize:9,color:C.dim,letterSpacing:".12em",textTransform:"uppercase",marginBottom:6}}>Evolução</p><div style={{display:"flex",gap:6,alignItems:"flex-end"}}>{registros.slice().reverse().map((r,i)=>{const isLast=i===registros.length-1;return(<div key={r.id} style={{flex:1,textAlign:"center"}}><div style={{height:6,borderRadius:3,background:isLast?sC(r.status):`${sC(r.status)}50`,marginBottom:4}}/><p style={{fontSize:8,color:C.dim}}>{r.valor}</p><p style={{fontSize:7,color:C.dim}}>{fmt(r.data)}</p></div>);})}</div></>)}</Card>);})}</>);})()}
         </>
       )}
 
@@ -930,6 +1003,46 @@ function Health({profile,weights,compositions,onAddWeight,onAddComp,onDeleteWeig
         </>
       )}
 
+      {showMarcadorSheet&&(
+        <Sheet onClose={()=>setShowMarcadorSheet(false)} title="+ Marcador Manual" subtitle="Adicione valores de exames anteriores">
+          {/* -- Executar no Supabase SQL Editor:
+          create table if not exists marcadores_exame (
+            id uuid default gen_random_uuid() primary key,
+            nome text not null, valor numeric, unidade text,
+            status text, referencia text,
+            data date default current_date, fonte text default 'manual',
+            created_at timestamptz default now()
+          );
+          alter table marcadores_exame disable row level security; -- */}
+          <div style={{marginBottom:14}}>
+            <p style={{fontSize:10,letterSpacing:".16em",textTransform:"uppercase",color:C.dim,marginBottom:10,fontWeight:700}}>Nome do marcador</p>
+            <div style={{display:"flex",flexWrap:"wrap",gap:6,marginBottom:10}}>
+              {["Vitamina B12","Vitamina D","Colesterol Total","HDL","LDL","Triglicerídeos","Glicose","Hemoglobina","Ferritina","TSH"].map(n=>(
+                <button key={n} onClick={()=>setNovoMarcador(p=>({...p,nome:n}))} style={{padding:"6px 12px",borderRadius:20,fontSize:11,border:novoMarcador.nome===n?`1.5px solid ${C.blue}`:"1.5px solid rgba(255,255,255,.1)",background:novoMarcador.nome===n?"rgba(96,165,250,.15)":"transparent",color:novoMarcador.nome===n?C.blue:C.muted,cursor:"pointer",fontFamily:"inherit",fontWeight:novoMarcador.nome===n?700:400}}>{n}</button>
+              ))}
+            </div>
+            <input value={novoMarcador.nome} onChange={e=>setNovoMarcador(p=>({...p,nome:e.target.value}))} placeholder="Ou digite outro marcador..." style={{width:"100%",background:"rgba(255,255,255,.05)",border:"1.5px solid rgba(255,255,255,.1)",borderRadius:12,padding:"11px 14px",color:"#fff",fontSize:13,outline:"none",fontFamily:"inherit"}}/>
+          </div>
+          <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:10}}>
+            {[{k:"valor",l:"Valor",p:"Ex: 450"},{k:"unidade",l:"Unidade",p:"Ex: pg/mL"},{k:"referencia",l:"Referência",p:"Ex: 200-900"}].map(f=>(
+              <div key={f.k} style={{gridColumn:f.k==="referencia"?"span 2":"span 1"}}>
+                <p style={{fontSize:9,letterSpacing:".14em",textTransform:"uppercase",color:C.dim,marginBottom:6,fontWeight:700}}>{f.l}</p>
+                <input type={f.k==="valor"?"number":"text"} value={novoMarcador[f.k]} onChange={e=>setNovoMarcador(p=>({...p,[f.k]:e.target.value}))} placeholder={f.p} style={{width:"100%",background:"rgba(255,255,255,.05)",border:"1.5px solid rgba(255,255,255,.1)",borderRadius:10,padding:"11px 12px",color:"#fff",fontSize:13,outline:"none",fontFamily:"inherit"}}/>
+              </div>
+            ))}
+          </div>
+          <div style={{marginTop:14,marginBottom:18}}>
+            <p style={{fontSize:10,letterSpacing:".16em",textTransform:"uppercase",color:C.dim,marginBottom:10,fontWeight:700}}>Status</p>
+            <div style={{display:"flex",gap:8}}>
+              {[{v:"ok",l:"✓ Normal",c:C.green},{v:"atenção",l:"⚠ Atenção",c:C.orange},{v:"crítico",l:"✕ Crítico",c:C.red}].map(s=>(
+                <button key={s.v} onClick={()=>setNovoMarcador(p=>({...p,status:s.v}))} style={{flex:1,padding:"11px 6px",borderRadius:12,border:novoMarcador.status===s.v?`2px solid ${s.c}`:"1.5px solid rgba(255,255,255,.1)",background:novoMarcador.status===s.v?`${s.c}15`:"transparent",color:novoMarcador.status===s.v?s.c:C.muted,fontSize:12,fontWeight:700,cursor:"pointer",fontFamily:"inherit"}}>{s.l}</button>
+              ))}
+            </div>
+          </div>
+          <Btn onClick={async()=>{if(!novoMarcador.nome||!novoMarcador.valor)return;try{const [s]=await DB.post("marcadores_exame",{...novoMarcador,valor:parseFloat(novoMarcador.valor),data:todayStr(),fonte:"manual"});setMarcadoresHist(m=>[s,...m]);setShowMarcadorSheet(false);setNovoMarcador({nome:"",valor:"",unidade:"",status:"ok",referencia:""});}catch(e){console.error(e);}}} full disabled={!novoMarcador.nome||!novoMarcador.valor}>Salvar marcador</Btn>
+        </Sheet>
+      )}
+
       {showMedidas&&(
         <Sheet onClose={()=>setShowMedidas(false)} title="📏 Registrar Medidas" subtitle="Meça sempre no mesmo horário, em jejum.">
           <div style={{background:"rgba(250,204,21,0.06)",border:"1px solid rgba(250,204,21,0.15)",borderRadius:12,padding:"12px 14px",marginBottom:16}}>
@@ -956,6 +1069,19 @@ function Journey({profile,weights,trainings}){
   const lw=weights[0]?.peso||profile?.peso;
   const lost=Math.max(0,(profile?.peso||0)-(lw||0));
   const phase=lw>130?1:lw>120?2:lw>110?3:lw>100?4:lw>95?5:6;
+  const [planoFase,setPlanoFase]=useState("");
+  const [loadPlanoFase,setLoadPlanoFase]=useState(false);
+  const [faseExpandida,setFaseExpandida]=useState(null);
+  const genPlanoFase=async(fase)=>{
+    setFaseExpandida(fase.n);setLoadPlanoFase(true);setPlanoFase("");
+    const totalTreinos=trainings.length;
+    const mesPassado=trainings.filter(t=>(new Date()-new Date(t.data))<=30*86400000).length;
+    try{
+      const r=await callAI([{role:"user",content:`Crie um plano específico para a ${fase.name} da Jornada Ultraman do Cleiton.\n\nOBJETIVO DA FASE: ${fase.goal}\nPESO ALVO DA FASE: ${fase.weight?fase.weight+"kg":"Completar Ultraman"}\n\nSITUAÇÃO ATUAL:\n- Peso: ${lw}kg\n- Total de treinos registrados: ${totalTreinos}\n- Treinos no último mês: ${mesPassado}\n- Limitações: ${profile?.limitacoes||"Nenhuma"}\n- Medicamentos: ${profile?.medicamentos||"Nenhum"}\n\nCONTEXTO:\n- Objetivo final: Ultraman (10km natação + 421km bike + 84km corrida)\n- Não sabe nadar ainda (prioridade aprender)\n- Tem bike indoor\n- Joga tênis aos sábados\n- Protocolo Musy + Cariani\n\nCrie um plano COMPLETO para essa fase com:\n\n1. DURAÇÃO ESTIMADA\n   Quantas semanas/meses para atingir o objetivo da fase\n\n2. TREINOS SEMANAIS\n   Distribuição dos 7 dias com modalidade e duração\n\n3. FOCO PRINCIPAL\n   O que é mais importante nessa fase específica\n\n4. MARCOS DE PROGRESSÃO\n   3 checkpoints mensuráveis para saber que está evoluindo\n\n5. NUTRIÇÃO DA FASE\n   Ajuste calórico e proteico específico para esse momento\n\n6. ALERTA DE RISCO\n   O que pode fazer a fase falhar e como evitar\n\nSeja específico, prático e direto. Máximo 350 palavras.`}],"Coach especialista em triathlon e emagrecimento progressivo. Protocolo Musy + Cariani. Português direto.",700);
+      setPlanoFase(r);
+    }catch{setPlanoFase("Erro ao gerar. Tente novamente.");}
+    setLoadPlanoFase(false);
+  };
   return(
     <div style={{padding:"22px 18px",paddingBottom:170}}>
       <div style={{marginBottom:20}}><h2 style={{fontFamily:"'Clash Display',sans-serif",fontSize:26,fontWeight:700,marginBottom:4}}>Jornada Ultraman 🏆</h2><p style={{fontSize:12,color:C.muted}}>Sua linha do tempo até o objetivo final</p></div>
@@ -973,16 +1099,32 @@ function Journey({profile,weights,trainings}){
         {ULTRAMAN.map((p,i)=>{
           const done=phase>p.n,cur=phase===p.n;
           return(
-            <div key={i} style={{display:"flex",gap:16,marginBottom:20,position:"relative",zIndex:1}}>
-              <div style={{width:40,height:40,borderRadius:"50%",background:done?p.color:cur?`${p.color}20`:"rgba(255,255,255,.05)",border:cur?`3px solid ${p.color}`:`2px solid ${done?p.color:"rgba(255,255,255,.1)"}`,display:"flex",alignItems:"center",justifyContent:"center",fontSize:done?16:12,fontWeight:900,color:done?"#000":cur?p.color:C.dim,flexShrink:0,boxShadow:cur?`0 0 20px ${p.color}40`:"none"}}>{done?"✓":p.n}</div>
-              <div style={{flex:1,background:cur?`${p.color}08`:"transparent",border:cur?`1px solid ${p.color}25`:"1px solid transparent",borderRadius:14,padding:"10px 14px"}}>
-                <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:4}}>
-                  <p style={{fontSize:14,fontWeight:cur||done?800:600,color:done?C.muted:cur?p.color:"rgba(255,255,255,.5)"}}>{p.name}</p>
-                  {cur&&<Badge color={p.color}>Atual</Badge>}
-                  {done&&<Badge color={C.green}>✓</Badge>}
+            <div key={i} style={{marginBottom:20,position:"relative",zIndex:1}}>
+              <div style={{display:"flex",gap:16}}>
+                <div style={{width:40,height:40,borderRadius:"50%",background:done?p.color:cur?`${p.color}20`:"rgba(255,255,255,.05)",border:cur?`3px solid ${p.color}`:`2px solid ${done?p.color:"rgba(255,255,255,.1)"}`,display:"flex",alignItems:"center",justifyContent:"center",fontSize:done?16:12,fontWeight:900,color:done?"#000":cur?p.color:C.dim,flexShrink:0,boxShadow:cur?`0 0 20px ${p.color}40`:"none"}}>{done?"✓":p.n}</div>
+                <div style={{flex:1,background:cur?`${p.color}08`:"transparent",border:cur?`1px solid ${p.color}25`:"1px solid transparent",borderRadius:14,padding:"10px 14px"}}>
+                  <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:4}}>
+                    <p style={{fontSize:14,fontWeight:cur||done?800:600,color:done?C.muted:cur?p.color:"rgba(255,255,255,.5)"}}>{p.name}</p>
+                    {cur&&<Badge color={p.color}>Atual</Badge>}
+                    {done&&<Badge color={C.green}>✓</Badge>}
+                  </div>
+                  <p style={{fontSize:11,color:C.dim}}>{p.goal}</p>
+                  {cur&&<button onClick={()=>faseExpandida===p.n?setFaseExpandida(null):genPlanoFase(p)} style={{marginTop:8,background:`${p.color}15`,border:`1px solid ${p.color}30`,borderRadius:10,padding:"7px 14px",color:p.color,fontSize:11,fontWeight:700,cursor:"pointer",fontFamily:"inherit"}}>{faseExpandida===p.n?"▲ Fechar":"📋 Ver plano desta fase"}</button>}
+                  {done&&<button onClick={()=>faseExpandida===p.n?setFaseExpandida(null):genPlanoFase(p)} style={{marginTop:8,background:"rgba(74,222,128,0.1)",border:"1px solid rgba(74,222,128,0.2)",borderRadius:10,padding:"7px 14px",color:C.green,fontSize:11,fontWeight:700,cursor:"pointer",fontFamily:"inherit"}}>{faseExpandida===p.n?"▲ Fechar":"📋 Revisitar plano"}</button>}
                 </div>
-                <p style={{fontSize:11,color:C.dim}}>{p.goal}</p>
               </div>
+              {faseExpandida===p.n&&(
+                <div style={{marginLeft:56,marginBottom:16,background:`${p.color}08`,border:`1px solid ${p.color}20`,borderRadius:16,padding:16,animation:"fadeIn 0.3s ease"}}>
+                  {loadPlanoFase&&<Spin text="Coach elaborando plano da fase"/>}
+                  {planoFase&&!loadPlanoFase&&(
+                    <>
+                      <p style={{fontSize:9,letterSpacing:"0.18em",textTransform:"uppercase",color:p.color,fontWeight:800,marginBottom:12}}>📋 Plano · {p.name}</p>
+                      <p style={{fontSize:12,color:"rgba(255,255,255,0.72)",lineHeight:1.85,whiteSpace:"pre-line",marginBottom:14}}>{planoFase}</p>
+                      <button onClick={()=>{const blob=new Blob([`PLANO - ${p.name}\n${p.goal}\n\n${planoFase}`],{type:"text/plain;charset=utf-8"});const url=URL.createObjectURL(blob);const a=document.createElement("a");a.href=url;a.download=`plano-${p.name.toLowerCase().replace(" ","-")}.txt`;a.click();URL.revokeObjectURL(url);}} style={{width:"100%",border:"none",borderRadius:12,padding:"11px",fontSize:12,fontWeight:700,cursor:"pointer",fontFamily:"inherit",background:`${p.color}15`,color:p.color}}>⬇ Baixar plano em TXT</button>
+                    </>
+                  )}
+                </div>
+              )}
             </div>
           );
         })}
@@ -1046,6 +1188,8 @@ function Settings({profile,onUpdateProfile}){
   const [saved,setSaved]=useState(false);
   const [webhook,setWebhook]=useState("");
   const [showReset,setShowReset]=useState(false);
+  const [motivo,setMotivo]=useState("");
+  const [showPausaForm,setShowPausaForm]=useState(false);
   useEffect(()=>{DB.get("configuracoes","?chave=eq.webhook_url").then(r=>{if(r?.[0]?.valor)setWebhook(r[0].valor);}).catch(()=>{});}, []);
   const save=async()=>{
     setSaving(true);
@@ -1116,6 +1260,20 @@ function Settings({profile,onUpdateProfile}){
             <p style={{fontSize:14,fontWeight:700,marginBottom:6}}>📦 Backup dos dados</p>
             <p style={{fontSize:12,color:C.muted,lineHeight:1.6,marginBottom:14}}>Exporta todos os dados em JSON.</p>
             <Btn onClick={async()=>{const [p,m,t,w]=await Promise.all([DB.get("perfil"),DB.get("refeicoes"),DB.get("treinos"),DB.get("pesos")]);const blob=new Blob([JSON.stringify({perfil:p,refeicoes:m,treinos:t,pesos:w},null,2)],{type:"application/json"});const url=URL.createObjectURL(blob);const a=document.createElement("a");a.href=url;a.download=`vida-tracker-backup.json`;a.click();}} variant="green" full>⬇ Baixar backup JSON</Btn>
+          </Card>
+          <Card style={{marginBottom:14}}>
+            <p style={{fontSize:14,fontWeight:700,marginBottom:6}}>⏸️ Modo Pausa</p>
+            <p style={{fontSize:12,color:C.muted,lineHeight:1.6,marginBottom:14}}>Viagem, trabalho intenso ou período de recuperação? Registre a pausa para não quebrar seu histórico.</p>
+            {(()=>{
+              const pausaAtiva=localStorage.getItem("pausa_ativa");
+              const pausaMotivo=localStorage.getItem("pausa_motivo");
+              const pausaInicio=localStorage.getItem("pausa_inicio");
+              if(pausaAtiva==="true"){
+                const dias=Math.floor((new Date()-new Date(pausaInicio))/86400000);
+                return(<div><div style={{background:"rgba(251,146,60,0.1)",border:"1px solid rgba(251,146,60,0.25)",borderRadius:12,padding:"12px 14px",marginBottom:12}}><p style={{fontSize:12,fontWeight:700,color:C.orange,marginBottom:4}}>⏸️ Pausa ativa há {dias} dias</p><p style={{fontSize:11,color:C.muted}}>Motivo: {pausaMotivo}</p><p style={{fontSize:11,color:C.muted}}>Desde: {pausaInicio}</p></div><Btn onClick={()=>{localStorage.removeItem("pausa_ativa");localStorage.removeItem("pausa_motivo");localStorage.removeItem("pausa_inicio");window.location.reload();}} variant="green" full>▶️ Retomar jornada</Btn></div>);
+              }
+              return(<div>{!showPausaForm?(<Btn onClick={()=>setShowPausaForm(true)} variant="ghost" full>⏸️ Ativar modo pausa</Btn>):(<><div style={{marginBottom:12}}><p style={{fontSize:10,letterSpacing:".16em",textTransform:"uppercase",color:C.dim,marginBottom:10,fontWeight:700}}>Motivo da pausa</p><div style={{display:"flex",flexWrap:"wrap",gap:7}}>{["Trabalho intenso","Viagem","Lesão","Doença","Férias","Outro"].map(m=>(<button key={m} onClick={()=>setMotivo(m)} style={{padding:"8px 14px",borderRadius:20,border:motivo===m?`1.5px solid ${C.orange}`:"1.5px solid rgba(255,255,255,.1)",background:motivo===m?"rgba(251,146,60,0.15)":"transparent",color:motivo===m?C.orange:C.muted,fontSize:11,fontWeight:motivo===m?700:400,cursor:"pointer",fontFamily:"inherit"}}>{m}</button>))}</div></div><div style={{display:"flex",gap:8}}><Btn onClick={()=>setShowPausaForm(false)} variant="ghost">Cancelar</Btn><Btn onClick={()=>{localStorage.setItem("pausa_ativa","true");localStorage.setItem("pausa_motivo",motivo||"Não especificado");localStorage.setItem("pausa_inicio",todayStr());window.location.reload();}} disabled={!motivo} full>Confirmar pausa</Btn></div></>)}</div>);
+            })()}
           </Card>
           <Card style={{background:"rgba(248,113,113,.06)",border:"1px solid rgba(248,113,113,.2)"}}>
             <p style={{fontSize:14,fontWeight:700,marginBottom:6,color:C.red}}>⚠️ Zona de perigo</p>
@@ -1258,6 +1416,7 @@ export default function App(){
         *{box-sizing:border-box;margin:0;padding:0;}
         @keyframes slideUp{from{transform:translateY(100%);opacity:0}to{transform:translateY(0);opacity:1}}
         @keyframes ldot{0%,80%,100%{transform:scale(.45);opacity:.2}40%{transform:scale(1);opacity:1}}
+        @keyframes fadeIn{from{opacity:0;transform:translateY(8px)}to{opacity:1;transform:translateY(0)}}
         input{font-family:'Plus Jakarta Sans',sans-serif!important;color:#fff!important;}
         input::placeholder{color:rgba(255,255,255,.2)!important;}
         ::-webkit-scrollbar{width:2px;}::-webkit-scrollbar-thumb{background:rgba(255,255,255,.1);border-radius:2px;}
