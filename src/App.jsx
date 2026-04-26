@@ -16,6 +16,8 @@ const parseHFTime=(t)=>{const m=t&&t.match(/(\d+)h:(\d+)m/);return m?parseInt(m[
 const parseHFDate=(d)=>{const p=d&&d.split("/");return p&&p.length===3?`${p[2]}-${p[1]}-${p[0]}`:null;};
 const parseCSV=(text)=>{const lines=text.trim().split("\n");const hdrs=lines[0].split(",").map(h=>h.trim().replace(/^"|"$/g,""));return lines.slice(1).map(line=>{const vals=[];let inQ=false,cur="";for(const ch of line){if(ch==='"')inQ=!inQ;else if(ch===','&&!inQ){vals.push(cur.trim());cur="";}else cur+=ch;}vals.push(cur.trim());return Object.fromEntries(hdrs.map((h,i)=>[h,(vals[i]||"").replace(/^"|"$/g,"").trim()]));});};
 const parseHNum=(v)=>{if(!v||!v.trim())return null;const n=parseFloat(v.replace(/[^\d.,]/g,"").replace(",","."));return isNaN(n)?null:n;};
+const TACO_UNIDADES={"ovo":[{label:"1 ovo pequeno (40g)",gramas:40},{label:"1 ovo médio (50g)",gramas:50},{label:"1 ovo grande (60g)",gramas:60}],"banana":[{label:"1 banana pequena (70g)",gramas:70},{label:"1 banana média (90g)",gramas:90},{label:"1 banana grande (120g)",gramas:120}],"arroz":[{label:"1 concha pequena (80g)",gramas:80},{label:"1 concha média (100g)",gramas:100},{label:"1 concha grande (130g)",gramas:130}],"feijao":[{label:"1 concha pequena (80g)",gramas:80},{label:"1 concha média (100g)",gramas:100},{label:"1 concha grande (130g)",gramas:130}],"frango":[{label:"1 filé pequeno (100g)",gramas:100},{label:"1 filé médio (150g)",gramas:150},{label:"1 filé grande (200g)",gramas:200}],"pao":[{label:"1 unidade (50g)",gramas:50},{label:"2 unidades (100g)",gramas:100}],"batata":[{label:"1 pequena (100g)",gramas:100},{label:"1 média (150g)",gramas:150},{label:"1 grande (200g)",gramas:200}],"leite":[{label:"1 copo (200ml)",gramas:200},{label:"1 copo grande (300ml)",gramas:300}],"iogurte":[{label:"1 pote pequeno (170g)",gramas:170},{label:"1 pote (200g)",gramas:200}],"azeite":[{label:"1 col. sopa rasa (7g)",gramas:7},{label:"1 col. sopa (10g)",gramas:10},{label:"1 col. sopa cheia (15g)",gramas:15}],"salmao":[{label:"1 filé pequeno (100g)",gramas:100},{label:"1 filé médio (150g)",gramas:150},{label:"1 filé grande (200g)",gramas:200}],"atum":[{label:"1 lata pequena (120g)",gramas:120},{label:"1 lata grande (170g)",gramas:170}],"tapioca":[{label:"1 pequena (50g)",gramas:50},{label:"1 média (80g)",gramas:80},{label:"1 grande (100g)",gramas:100}],"tilapia":[{label:"1 filé pequeno (100g)",gramas:100},{label:"1 filé médio (150g)",gramas:150}],"whey":[{label:"1 dose (30g)",gramas:30},{label:"1 dose (35g)",gramas:35}]};
+const getTacoUnidades=(nome)=>{const n=nome.toLowerCase();for(const[k,v]of Object.entries(TACO_UNIDADES))if(n.includes(k))return v;return null;};
 const parseHealthRows=(rows,existing=[])=>rows.reduce((acc,row)=>{
   const date=parseHFDate((row["Date"]||"").trim());if(!date)return acc;
   if(existing.some(e=>e.data===date))return acc;
@@ -610,6 +612,7 @@ function Nutrition({profile,meals,onAdd,onDelete}){
   const [tacoSel,setTacoSel]=useState(null);
   const [tacoQtd,setTacoQtd]=useState("100");
   const [loadTaco,setLoadTaco]=useState(false);
+  const [tacoCart,setTacoCart]=useState([]);
 
   const tk=todayStr();
   const dayMeals=meals.filter(m=>m.data===selDate);
@@ -655,6 +658,10 @@ function Nutrition({profile,meals,onAdd,onDelete}){
     onAdd({...data,tipo:mealType,data:mealDate,hora:fmtNow()});
     setImgRes(null);setImgPrev(null);setTacoSel(null);setTacoQ("");setTacoR([]);
   };
+  const buildTacoNome=(food,qtd)=>{const u=getTacoUnidades(food.nome)?.find(x=>String(x.gramas)===qtd);return u?`${food.nome} (${u.label})`:`${food.nome} (${qtd}g)`;};
+  const addTacoDirect=(food,e)=>{e.stopPropagation();const m=tacoMacros(food,tacoQtd);onAdd({nome:buildTacoNome(food,tacoQtd),...m,tipo:mealType,data:mealDate,hora:fmtNow(),foto:null,dica:"",descricao:""});setTacoSel(null);};
+  const addToCart=(food,e)=>{e.stopPropagation();const m=tacoMacros(food,tacoQtd);setTacoCart(c=>[...c,{nome:buildTacoNome(food,tacoQtd),macros:m}]);setTacoSel(null);};
+  const saveCart=()=>{tacoCart.forEach(item=>onAdd({nome:item.nome,...item.macros,tipo:mealType,data:mealDate,hora:fmtNow(),foto:null,dica:"",descricao:""}));setTacoCart([]);setTacoSel(null);};
 
   const TypeSelector=()=>(
     <div style={{marginBottom:14}}>
@@ -746,37 +753,81 @@ function Nutrition({profile,meals,onAdd,onDelete}){
 
       {sub==="taco"&&(
         <>
+          {tacoCart.length>0&&(()=>{
+            const tot={cal:tacoCart.reduce((s,i)=>s+i.macros.calorias,0),prot:Math.round(tacoCart.reduce((s,i)=>s+i.macros.proteina,0)*10)/10,carbs:Math.round(tacoCart.reduce((s,i)=>s+i.macros.carbs,0)*10)/10};
+            const mLabel=MEAL_TYPES.find(t=>t.id===mealType)?.label||"Refeição";
+            return(
+              <Card style={{marginBottom:16,background:"rgba(74,222,128,.06)",border:"1px solid rgba(74,222,128,.25)"}}>
+                <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:10}}>
+                  <p style={{fontSize:13,fontWeight:700,color:C.green}}>🛒 Grupo · {tacoCart.length} {tacoCart.length===1?"item":"itens"}</p>
+                  <button onClick={()=>setTacoCart([])} style={{background:"transparent",border:"none",color:C.muted,fontSize:12,cursor:"pointer",fontFamily:"inherit"}}>Limpar</button>
+                </div>
+                {tacoCart.map((item,i)=>(
+                  <div key={i} style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:7,paddingBottom:7,borderBottom:i<tacoCart.length-1?`1px solid ${C.border}`:"none"}}>
+                    <p style={{fontSize:12,fontWeight:600,flex:1}}>{item.nome}</p>
+                    <div style={{display:"flex",alignItems:"center",gap:10}}>
+                      <span style={{fontSize:11,color:C.yellow}}>{item.macros.calorias}kcal</span>
+                      <button onClick={()=>setTacoCart(c=>c.filter((_,j)=>j!==i))} style={{background:"rgba(248,113,113,.15)",border:"none",borderRadius:6,width:20,height:20,cursor:"pointer",color:C.red,fontSize:11,display:"flex",alignItems:"center",justifyContent:"center"}}>×</button>
+                    </div>
+                  </div>
+                ))}
+                <div style={{display:"flex",gap:12,margin:"10px 0",paddingTop:8,borderTop:`1px solid ${C.border}`}}>
+                  {[{l:"kcal",v:tot.cal,c:C.yellow},{l:"prot",v:`${tot.prot}g`,c:C.purple},{l:"carbs",v:`${tot.carbs}g`,c:C.blue}].map((s,i)=>(
+                    <div key={i} style={{flex:1,textAlign:"center"}}><p style={{fontFamily:"'Clash Display',sans-serif",fontSize:17,fontWeight:700,color:s.c}}>{s.v}</p><p style={{fontSize:9,color:C.dim}}>{s.l}</p></div>
+                  ))}
+                </div>
+                <Btn onClick={saveCart} variant="green" full>💾 Salvar como {mLabel}</Btn>
+              </Card>
+            );
+          })()}
           <div style={{background:"rgba(96,165,250,.08)",border:"1px solid rgba(96,165,250,.2)",borderRadius:14,padding:"12px 14px",marginBottom:16}}>
-            <p style={{fontSize:12,color:C.muted,lineHeight:1.6}}>🇧🇷 <strong>Tabela TACO</strong> — Tabela Brasileira de Composição de Alimentos. Busque pelo nome e ajuste a quantidade.</p>
+            <p style={{fontSize:12,color:C.muted,lineHeight:1.6}}>🇧🇷 <strong>Tabela TACO</strong> — Busque o alimento, escolha a quantidade e adicione direto ou ao grupo.</p>
           </div>
           <FIn label="Data da refeição" type="date" value={mealDate} onChange={setMealDate}/>
           <TypeSelector/>
           <div style={{display:"flex",gap:8,marginBottom:14}}>
-            <input value={tacoQ} onChange={e=>setTacoQ(e.target.value)} onKeyDown={e=>e.key==="Enter"&&searchTaco()} placeholder="Ex: frango grelhado, arroz..." style={{flex:1,background:"rgba(255,255,255,.05)",border:"1.5px solid rgba(255,255,255,.1)",borderRadius:12,padding:"13px 16px",color:"#fff",fontSize:14,outline:"none",fontFamily:"inherit"}}/>
+            <input value={tacoQ} onChange={e=>setTacoQ(e.target.value)} onKeyDown={e=>e.key==="Enter"&&searchTaco()} placeholder="Ex: frango, arroz, ovo..." style={{flex:1,background:"rgba(255,255,255,.05)",border:"1.5px solid rgba(255,255,255,.1)",borderRadius:12,padding:"13px 16px",color:"#fff",fontSize:14,outline:"none",fontFamily:"inherit"}}/>
             <Btn onClick={searchTaco} disabled={loadTaco} style={{flexShrink:0}}>{loadTaco?"...":"Buscar"}</Btn>
           </div>
           {tacoR.length===0&&tacoQ&&!loadTaco&&<p style={{fontSize:13,color:C.dim,textAlign:"center",padding:"16px 0"}}>Nenhum resultado. Tente: "frango", "arroz", "feijao"</p>}
-          {tacoR.map(food=>(
-            <Card key={food.id} onClick={()=>setTacoSel(food)} style={{marginBottom:8,cursor:"pointer",border:tacoSel?.id===food.id?`1.5px solid ${C.yellow}`:`1px solid ${C.border}`,background:tacoSel?.id===food.id?"rgba(250,204,21,.06)":C.card}}>
-              <div style={{display:"flex",justifyContent:"space-between",alignItems:"center"}}>
-                <div><p style={{fontSize:13,fontWeight:700,marginBottom:3}}>{food.nome}</p><p style={{fontSize:11,color:C.muted}}>{food.categoria} · por {food.porcao_padrao||100}g</p></div>
-                <div style={{textAlign:"right"}}><p style={{fontFamily:"'Clash Display',sans-serif",fontSize:16,fontWeight:700,color:C.yellow}}>{food.calorias}</p><p style={{fontSize:9,color:C.dim}}>kcal</p></div>
-              </div>
-              {tacoSel?.id===food.id&&(
-                <div style={{marginTop:12,paddingTop:12,borderTop:`1px solid ${C.border}`}}>
-                  <div style={{display:"flex",gap:16,marginBottom:12}}>
-                    {[{l:"Prot",v:`${food.proteina}g`,c:C.purple},{l:"Carbs",v:`${food.carbs}g`,c:C.blue},{l:"Gord",v:`${food.gordura}g`,c:C.orange}].map((m,i)=><div key={i} style={{textAlign:"center"}}><p style={{fontFamily:"'Clash Display',sans-serif",fontSize:15,fontWeight:700,color:m.c}}>{m.v}</p><p style={{fontSize:9,color:C.dim}}>{m.l}</p></div>)}
-                  </div>
-                  <div style={{display:"flex",gap:8,alignItems:"center"}}>
-                    <input type="number" value={tacoQtd} onChange={e=>setTacoQtd(e.target.value)} style={{width:80,background:"rgba(255,255,255,.05)",border:"1.5px solid rgba(255,255,255,.1)",borderRadius:10,padding:"10px 12px",color:"#fff",fontSize:13,outline:"none",fontFamily:"inherit"}}/>
-                    <span style={{fontSize:12,color:C.muted}}>g</span>
-                    <Btn onClick={()=>{const m=tacoMacros(food,tacoQtd);saveMeal({nome:`${food.nome} (${tacoQtd}g)`,...m,foto:null,dica:"",descricao:""});}} style={{flex:1}}>Adicionar</Btn>
-                  </div>
-                  {tacoQtd&&parseFloat(tacoQtd)!==100&&<p style={{fontSize:11,color:C.muted,marginTop:8}}>Para {tacoQtd}g: {tacoMacros(food,tacoQtd).calorias}kcal · {tacoMacros(food,tacoQtd).proteina}g prot</p>}
+          {tacoR.map(food=>{
+            const units=getTacoUnidades(food.nome);
+            const isOpen=tacoSel?.id===food.id;
+            return(
+              <Card key={food.id} onClick={()=>{setTacoSel(isOpen?null:food);setTacoQtd("100");}} style={{marginBottom:8,cursor:"pointer",border:isOpen?`1.5px solid ${C.yellow}`:`1px solid ${C.border}`,background:isOpen?"rgba(250,204,21,.06)":C.card}}>
+                <div style={{display:"flex",justifyContent:"space-between",alignItems:"center"}}>
+                  <div><p style={{fontSize:13,fontWeight:700,marginBottom:3}}>{food.nome}</p><p style={{fontSize:11,color:C.muted}}>{food.categoria} · por {food.porcao_padrao||100}g</p></div>
+                  <div style={{textAlign:"right"}}><p style={{fontFamily:"'Clash Display',sans-serif",fontSize:16,fontWeight:700,color:C.yellow}}>{food.calorias}</p><p style={{fontSize:9,color:C.dim}}>kcal</p></div>
                 </div>
-              )}
-            </Card>
-          ))}
+                {isOpen&&(
+                  <div style={{marginTop:12,paddingTop:12,borderTop:`1px solid ${C.border}`}} onClick={e=>e.stopPropagation()}>
+                    <div style={{display:"flex",gap:16,marginBottom:12}}>
+                      {[{l:"Prot",v:`${food.proteina}g`,c:C.purple},{l:"Carbs",v:`${food.carbs}g`,c:C.blue},{l:"Gord",v:`${food.gordura}g`,c:C.orange}].map((m,i)=><div key={i} style={{textAlign:"center"}}><p style={{fontFamily:"'Clash Display',sans-serif",fontSize:15,fontWeight:700,color:m.c}}>{m.v}</p><p style={{fontSize:9,color:C.dim}}>{m.l}</p></div>)}
+                    </div>
+                    {units&&(
+                      <>
+                        <p style={{fontSize:10,letterSpacing:".13em",textTransform:"uppercase",color:C.dim,marginBottom:8,fontWeight:700}}>Quantidade</p>
+                        <div style={{display:"flex",flexWrap:"wrap",gap:6,marginBottom:10}}>
+                          {units.map((u,i)=>(
+                            <button key={i} onClick={()=>setTacoQtd(String(u.gramas))} style={{padding:"7px 11px",borderRadius:20,fontSize:11,cursor:"pointer",fontFamily:"inherit",border:tacoQtd===String(u.gramas)?`1.5px solid ${C.yellow}`:"1.5px solid rgba(255,255,255,.1)",background:tacoQtd===String(u.gramas)?"rgba(250,204,21,.15)":"transparent",color:tacoQtd===String(u.gramas)?C.yellow:C.muted,fontWeight:tacoQtd===String(u.gramas)?700:400}}>{u.label}</button>
+                          ))}
+                        </div>
+                      </>
+                    )}
+                    <div style={{display:"flex",gap:8,alignItems:"center",marginBottom:8}}>
+                      <input type="number" value={tacoQtd} onChange={e=>setTacoQtd(e.target.value)} style={{width:72,background:"rgba(255,255,255,.05)",border:"1.5px solid rgba(255,255,255,.1)",borderRadius:10,padding:"10px 12px",color:"#fff",fontSize:13,outline:"none",fontFamily:"inherit"}}/>
+                      <span style={{fontSize:12,color:C.muted}}>g</span>
+                      {tacoQtd&&(()=>{const m=tacoMacros(food,tacoQtd);return<p style={{fontSize:11,color:C.muted}}>→ {m.calorias}kcal · {m.proteina}g prot</p>;})()}
+                    </div>
+                    <div style={{display:"flex",gap:8}}>
+                      <Btn onClick={e=>addToCart(food,e)} variant="ghost" style={{flex:1}}>+ Grupo</Btn>
+                      <Btn onClick={e=>addTacoDirect(food,e)} style={{flex:1}}>Adicionar direto</Btn>
+                    </div>
+                  </div>
+                )}
+              </Card>
+            );
+          })}
         </>
       )}
 
