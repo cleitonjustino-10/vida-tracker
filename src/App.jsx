@@ -13,13 +13,13 @@ const gParts=(d)=>d.candidates?.[0]?.content?.parts?.filter(p=>!p.thought).map(p
 const parseJSON=(txt)=>{if(!txt)return null;const s=txt.replace(/```json\s?/gi,"").replace(/```/g,"").trim();try{return JSON.parse(s);}catch{}const m=s.match(/\{[\s\S]*\}/);if(m)try{return JSON.parse(m[0]);}catch{}return null;};
 async function callAI(msgs,sys="",max=1000){
   const contents=msgs.map((m,i)=>({role:m.role==="assistant"?"model":"user",parts:[{text:i===0&&sys?sys+"\n\n"+m.content:m.content}]}));
-  const r=await fetch(GURL(),{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({contents,generationConfig:{maxOutputTokens:max}})});
+  const r=await fetch(GURL(),{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({contents,generationConfig:{maxOutputTokens:max,thinkingConfig:{thinkingBudget:0}}})});
   const d=await r.json();if(d.error)throw new Error(d.error.message);
   return gParts(d);
 }
 const compressImg=(dataUrl,maxPx=1100)=>new Promise(res=>{const img=new Image();img.onload=()=>{const ratio=Math.min(maxPx/img.width,maxPx/img.height,1);const c=document.createElement("canvas");c.width=Math.round(img.width*ratio);c.height=Math.round(img.height*ratio);c.getContext("2d").drawImage(img,0,0,c.width,c.height);res(c.toDataURL("image/jpeg",0.82));};img.src=dataUrl;});
 async function callVision(b64,mime,prompt,max=2500){
-  const body={contents:[{parts:[{inlineData:{mimeType:mime,data:b64}},{text:"Retorne APENAS JSON válido sem markdown.\n\n"+prompt}]}],generationConfig:{maxOutputTokens:max}};
+  const body={contents:[{parts:[{inlineData:{mimeType:mime,data:b64}},{text:"Retorne APENAS JSON válido sem markdown.\n\n"+prompt}]}],generationConfig:{maxOutputTokens:max,thinkingConfig:{thinkingBudget:0}}};
   const r=await fetch(GURL(),{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify(body)});
   const d=await r.json();if(d.error)throw new Error(d.error.message);
   return parseJSON(gParts(d));
@@ -792,7 +792,7 @@ function Health({profile,weights,compositions,onAddWeight,onAddComp,onDeleteWeig
       try{
         let r;
         if(isPdf){
-          const body={contents:[{parts:[{inlineData:{mimeType:"application/pdf",data:e.target.result.split(",")[1]}},{text:"Retorne APENAS JSON válido sem markdown.\n\n"+ep}]}],generationConfig:{maxOutputTokens:3000}};
+          const body={contents:[{parts:[{inlineData:{mimeType:"application/pdf",data:e.target.result.split(",")[1]}},{text:"Retorne APENAS JSON válido sem markdown.\n\n"+ep}]}],generationConfig:{maxOutputTokens:8000,thinkingConfig:{thinkingBudget:0}}};
           const res=await fetch(GURL(),{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify(body)});
           const d=await res.json();if(d.error)throw new Error(d.error.message);
           r=parseJSON(gParts(d));
