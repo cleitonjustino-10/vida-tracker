@@ -9,18 +9,19 @@ async function sbq(m,t,b=null,q=""){
 const DB={get:(t,q="")=>sbq("GET",t,null,q),post:(t,b)=>sbq("POST",t,b),patch:(t,q,b)=>sbq("PATCH",t,b,q),del:(t,q)=>sbq("DELETE",t,null,q)};
 const getAK=()=>localStorage.getItem("anthropic_key")||import.meta.env.VITE_ANTHROPIC_KEY||"";
 const GURL=()=>`https://generativelanguage.googleapis.com/v1beta/models/gemini-flash-latest:generateContent?key=${getAK()}`;
+const gParts=(d)=>d.candidates?.[0]?.content?.parts?.filter(p=>!p.thought).map(p=>p.text||"").join("")||"";
 async function callAI(msgs,sys="",max=1000){
   const contents=msgs.map((m,i)=>({role:m.role==="assistant"?"model":"user",parts:[{text:i===0&&sys?sys+"\n\n"+m.content:m.content}]}));
   const r=await fetch(GURL(),{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({contents,generationConfig:{maxOutputTokens:max}})});
   const d=await r.json();if(d.error)throw new Error(d.error.message);
-  return d.candidates?.[0]?.content?.parts?.map(p=>p.text||"").join("")||"";
+  return gParts(d);
 }
 const compressImg=(dataUrl,maxPx=1100)=>new Promise(res=>{const img=new Image();img.onload=()=>{const ratio=Math.min(maxPx/img.width,maxPx/img.height,1);const c=document.createElement("canvas");c.width=Math.round(img.width*ratio);c.height=Math.round(img.height*ratio);c.getContext("2d").drawImage(img,0,0,c.width,c.height);res(c.toDataURL("image/jpeg",0.82));};img.src=dataUrl;});
 async function callVision(b64,mime,prompt){
   const body={contents:[{parts:[{inlineData:{mimeType:mime,data:b64}},{text:"Retorne APENAS JSON válido sem markdown.\n\n"+prompt}]}],generationConfig:{maxOutputTokens:2000}};
   const r=await fetch(GURL(),{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify(body)});
   const d=await r.json();if(d.error)throw new Error(d.error.message);
-  const txt=d.candidates?.[0]?.content?.parts?.map(p=>p.text||"").join("")||"{}";
+  const txt=gParts(d)||"{}";
   try{return JSON.parse(txt.replace(/```json|```/g,"").trim());}catch{return null;}
 }
 
@@ -794,7 +795,7 @@ function Health({profile,weights,compositions,onAddWeight,onAddComp,onDeleteWeig
           const body={contents:[{parts:[{inlineData:{mimeType:"application/pdf",data:e.target.result.split(",")[1]}},{text:"Retorne APENAS JSON válido sem markdown.\n\n"+ep}]}],generationConfig:{maxOutputTokens:3000}};
           const res=await fetch(GURL(),{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify(body)});
           const d=await res.json();if(d.error)throw new Error(d.error.message);
-          const txt=d.candidates?.[0]?.content?.parts?.map(p=>p.text||"").join("")||"{}";
+          const txt=gParts(d)||"{}";
           try{r=JSON.parse(txt.replace(/```json|```/g,"").trim());}catch{r=null;}
         }else{
           const compressed=await compressImg(e.target.result,1400);
