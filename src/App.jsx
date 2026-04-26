@@ -820,10 +820,15 @@ function Nutrition({profile,meals,onAdd,onDelete}){
 }
 
 // HEALTH — 3 subtabs: Peso / Xiaomi / Exames
-function Health({profile,weights,compositions,saudeDaily=[],onAddWeight,onAddComp,onDeleteWeight}){
+function Health({profile,weights,compositions,saudeDaily=[],onAddWeight,onAddComp,onDeleteWeight,onImportSaude}){
   const [sub,setSub]=useState("peso");
   const [showW,setShowW]=useState(false);
   const [showX,setShowX]=useState(false);
+  const [showImportHealth,setShowImportHealth]=useState(false);
+  const [importHealthUrl,setImportHealthUrl]=useState("");
+  const [importingHealth,setImportingHealth]=useState(false);
+  const [importHealthResult,setImportHealthResult]=useState(null);
+  const csvHealthRef=useRef();
   const [showMedidas,setShowMedidas]=useState(false);
   const [medidas,setMedidas]=useState([]);
   const [loadingMedidas,setLoadingMedidas]=useState(false);
@@ -842,6 +847,41 @@ function Health({profile,weights,compositions,saudeDaily=[],onAddWeight,onAddCom
   const [loadIns,setLoadIns]=useState(false);
   const fileXiRef=useRef();
   const fileExRef=useRef();
+
+  const importHealthFromUrl=async()=>{
+    setImportingHealth(true);setImportHealthResult(null);
+    try{
+      const match=importHealthUrl.match(/\/d\/([a-zA-Z0-9_-]+)/);
+      const gidMatch=importHealthUrl.match(/gid=(\d+)/);
+      if(!match)throw new Error("URL inválida");
+      const csvUrl=`https://docs.google.com/spreadsheets/d/${match[1]}/export?format=csv&gid=${gidMatch?.[1]||"0"}`;
+      const res=await fetch(csvUrl);
+      if(!res.ok)throw new Error("Não foi possível acessar a planilha");
+      const rows=parseCSV(await res.text());
+      const toInsert=parseHealthRows(rows,saudeDaily);
+      if(toInsert.length===0){setImportHealthResult({imported:0,skipped:rows.length});setImportingHealth(false);return;}
+      const n=await onImportSaude(toInsert);
+      setImportHealthResult({imported:n,skipped:rows.length-n});
+    }catch(e){alert("Erro: "+e.message);}
+    setImportingHealth(false);
+  };
+
+  const importHealthFromFile=(file)=>{
+    if(!file)return;
+    setImportingHealth(true);setImportHealthResult(null);
+    const reader=new FileReader();
+    reader.onload=async(e)=>{
+      try{
+        const rows=parseCSV(e.target.result);
+        const toInsert=parseHealthRows(rows,saudeDaily);
+        if(toInsert.length===0){setImportHealthResult({imported:0,skipped:rows.length});setImportingHealth(false);return;}
+        const n=await onImportSaude(toInsert);
+        setImportHealthResult({imported:n,skipped:rows.length-n});
+      }catch(ex){alert("Erro: "+ex.message);}
+      setImportingHealth(false);
+    };
+    reader.readAsText(file);
+  };
 
   const lw=weights[0]?.peso||profile?.peso;
   const lost=Math.max(0,(profile?.peso||0)-(lw||0));
@@ -991,6 +1031,10 @@ function Health({profile,weights,compositions,saudeDaily=[],onAddWeight,onAddCom
         };
         return(
           <>
+            <input ref={csvHealthRef} type="file" accept=".csv" style={{display:"none"}} onChange={e=>importHealthFromFile(e.target.files[0])}/>
+            <div style={{display:"flex",gap:8,marginBottom:16}}>
+              <Btn onClick={()=>{setShowImportHealth(true);setImportHealthResult(null);}} variant="blue" full>📥 Importar histórico</Btn>
+            </div>
             <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:10,marginBottom:16}}>
               {[
                 {label:"HRV",value:hrvHoje?`${hrvHoje} ms`:"-",sub:hrvStatus?`${hrvStatus} · média ${hrvAvg}ms`:"Sem dado",color:hrvColor,emoji:"❤️‍🔥"},
@@ -1031,6 +1075,27 @@ function Health({profile,weights,compositions,saudeDaily=[],onAddWeight,onAddCom
                 </Card>
               ))
             }
+            {showImportHealth&&(
+              <Sheet onClose={()=>{setShowImportHealth(false);setImportHealthResult(null);}} title="📥 Importar Saúde" subtitle="HRV · Passos · FC Repouso · VO₂max">
+                {importHealthResult?(
+                  <div style={{textAlign:"center",padding:"24px 0"}}>
+                    <div style={{fontSize:48,marginBottom:12}}>✅</div>
+                    <p style={{fontSize:22,fontWeight:800,color:C.green,marginBottom:6}}>{importHealthResult.imported} dias importados</p>
+                    <p style={{fontSize:13,color:C.muted,marginBottom:24}}>{importHealthResult.skipped} já existiam ou sem dados</p>
+                    <Btn onClick={()=>{setShowImportHealth(false);setImportHealthResult(null);}} full>Fechar</Btn>
+                  </div>
+                ):(
+                  <>
+                    <p style={{fontSize:10,letterSpacing:".15em",textTransform:"uppercase",color:C.dim,marginBottom:8,fontWeight:700}}>URL do Google Sheets</p>
+                    <input value={importHealthUrl} onChange={e=>setImportHealthUrl(e.target.value)} placeholder="https://docs.google.com/spreadsheets/d/..." style={{width:"100%",background:"rgba(255,255,255,.06)",border:"1px solid rgba(255,255,255,.12)",borderRadius:12,padding:"12px 14px",fontSize:12,color:"#fff",fontFamily:"inherit",marginBottom:12,boxSizing:"border-box"}}/>
+                    <Btn onClick={importHealthFromUrl} full disabled={!importHealthUrl.trim()||importingHealth}>{importingHealth?"Importando...":"🌐 Importar da URL"}</Btn>
+                    <div style={{display:"flex",alignItems:"center",gap:10,margin:"14px 0"}}><div style={{flex:1,height:1,background:"rgba(255,255,255,.08)"}}/><span style={{fontSize:11,color:C.dim}}>ou</span><div style={{flex:1,height:1,background:"rgba(255,255,255,.08)"}}/></div>
+                    <Btn onClick={()=>csvHealthRef.current?.click()} variant="ghost" full disabled={importingHealth}>📂 Upload CSV</Btn>
+                    {importingHealth&&<Spin text="Importando dados de saúde"/>}
+                  </>
+                )}
+              </Sheet>
+            )}
           </>
         );
       })()}
@@ -1746,7 +1811,7 @@ export default function App(){
     home:<Dashboard profile={profile} meals={meals} weights={weights} checkins={checkins} habits={habits} trainings={trainings} onTab={setTab}/>,
     training:<Training profile={profile} trainings={trainings} onAdd={addTraining} onDelete={delTraining} onImport={importTrainings}/>,
     nutrition:<Nutrition profile={profile} meals={meals} onAdd={addMeal} onDelete={delMeal}/>,
-    health:<Health profile={profile} weights={weights} compositions={compositions} saudeDaily={saudeDaily} onAddWeight={addWeight} onAddComp={addComp} onDeleteWeight={delWeight}/>,
+    health:<Health profile={profile} weights={weights} compositions={compositions} saudeDaily={saudeDaily} onAddWeight={addWeight} onAddComp={addComp} onDeleteWeight={delWeight} onImportSaude={importSaudeDaily}/>,
     journey:<Journey profile={profile} weights={weights} trainings={trainings}/>,
     habits:<Habits habits={habits} checkins={checkins} onToggle={toggleCI} onAdd={addHabit} onRemove={remHabit}/>,
     settings:<Settings profile={profile} onUpdateProfile={setProfile} onSyncNow={runHFSync} syncing={syncing} onSyncHealthNow={runHealthSync} syncingHealth={syncingHealth}/>,
