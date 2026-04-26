@@ -1299,7 +1299,7 @@ function Habits({habits,checkins,onToggle,onAdd,onRemove}){
 }
 
 // SETTINGS
-function Settings({profile,onUpdateProfile}){
+function Settings({profile,onUpdateProfile,onSyncNow,syncing}){
   const [sub,setSub]=useState("perfil");
   const [f,setF]=useState({nome:profile?.nome||"",sexo:profile?.sexo||"M",idade:String(profile?.idade||""),peso:String(profile?.peso||""),altura:String(profile?.altura||""),peso_meta:String(profile?.peso_meta||""),cal_meta:String(profile?.cal_meta||""),prot_meta:String(profile?.prot_meta||"")});
   const set=(k,v)=>setF(p=>({...p,[k]:v}));
@@ -1311,6 +1311,12 @@ function Settings({profile,onUpdateProfile}){
   const [showPausaForm,setShowPausaForm]=useState(false);
   const [apiKey,setApiKey]=useState(()=>localStorage.getItem("anthropic_key")||"");
   const [apiKeySaved,setApiKeySaved]=useState(false);
+  const [hfUrl,setHfUrl]=useState(()=>localStorage.getItem("hf_sheet_url")||"");
+  const [hfHour,setHfHour]=useState(()=>localStorage.getItem("hf_sync_hour")||"7");
+  const [hfSaved,setHfSaved]=useState(false);
+  const [syncResult,setSyncResult]=useState(null);
+  const lastSync=localStorage.getItem("hf_last_sync");
+  const lastSyncFmt=lastSync?new Date(lastSync).toLocaleString("pt-BR",{day:"2-digit",month:"2-digit",hour:"2-digit",minute:"2-digit"}):"Nunca";
   useEffect(()=>{DB.get("configuracoes","?chave=eq.webhook_url").then(r=>{if(r?.[0]?.valor)setWebhook(r[0].valor);}).catch(()=>{});}, []);
   const save=async()=>{
     setSaving(true);
@@ -1374,6 +1380,25 @@ function Settings({profile,onUpdateProfile}){
             </div>
             <FIn label="URL do Webhook Supabase" value={webhook} onChange={setWebhook} placeholder="https://rngptdmetqolhkjpkuvs.supabase.co/functions/v1/receive-workout"/>
             <Btn onClick={async()=>{try{await DB.patch("configuracoes","?chave=eq.webhook_url",{valor:webhook});}catch{}}} variant="blue" full>Salvar URL</Btn>
+          </Card>
+          <Card style={{marginBottom:16,background:hfUrl?"rgba(74,222,128,.06)":"rgba(96,165,250,.06)",border:hfUrl?`1px solid rgba(74,222,128,.2)`:`1px solid rgba(96,165,250,.2)`}}>
+            <div style={{display:"flex",alignItems:"center",gap:12,marginBottom:14}}>
+              <div style={{width:40,height:40,borderRadius:12,background:"rgba(96,165,250,.15)",display:"flex",alignItems:"center",justifyContent:"center",fontSize:20}}>🔄</div>
+              <div>
+                <p style={{fontSize:14,fontWeight:700,marginBottom:2}}>Auto-sync HealthFit</p>
+                <p style={{fontSize:11,color:hfUrl?C.green:C.muted}}>{hfUrl?`✓ Sync diário às ${hfHour}h · Último: ${lastSyncFmt}`:"Não configurado"}</p>
+              </div>
+            </div>
+            <p style={{fontSize:10,letterSpacing:".14em",textTransform:"uppercase",color:C.dim,marginBottom:8,fontWeight:700}}>URL do Google Sheets (HealthFit)</p>
+            <input value={hfUrl} onChange={e=>setHfUrl(e.target.value)} placeholder="https://docs.google.com/spreadsheets/d/..." style={{width:"100%",background:"rgba(255,255,255,.05)",border:"1.5px solid rgba(255,255,255,.1)",borderRadius:10,padding:"11px 14px",color:"#fff",fontSize:12,outline:"none",fontFamily:"inherit",marginBottom:10,boxSizing:"border-box"}}/>
+            <p style={{fontSize:10,letterSpacing:".14em",textTransform:"uppercase",color:C.dim,marginBottom:8,fontWeight:700}}>Horário do sync diário</p>
+            <select value={hfHour} onChange={e=>setHfHour(e.target.value)} style={{width:"100%",background:"#1e293b",border:"1.5px solid rgba(255,255,255,.1)",borderRadius:10,padding:"11px 14px",color:"#fff",fontSize:13,fontFamily:"inherit",marginBottom:12,outline:"none"}}>
+              {Array.from({length:24},(_,i)=><option key={i} value={String(i)}>{String(i).padStart(2,"0")}:00</option>)}
+            </select>
+            <div style={{display:"flex",gap:8}}>
+              <Btn onClick={()=>{localStorage.setItem("hf_sheet_url",hfUrl);localStorage.setItem("hf_sync_hour",hfHour);setHfSaved(true);setTimeout(()=>setHfSaved(false),2000);}} variant={hfUrl?"green":"primary"} full>{hfSaved?"✓ Salvo!":"Salvar"}</Btn>
+              {hfUrl&&<Btn onClick={async()=>{const n=await onSyncNow();setSyncResult(n);setTimeout(()=>setSyncResult(null),4000);}} variant="blue" disabled={syncing} style={{flexShrink:0}}>{syncing?"Sincronizando...":syncResult!==null?`✓ ${syncResult} novo(s)`:"Sync agora"}</Btn>}
+            </div>
           </Card>
           <Card>
             <p style={{fontSize:14,fontWeight:700,marginBottom:12}}>📋 Como configurar</p>
@@ -1475,6 +1500,8 @@ export default function App(){
   const [showCheckin,setShowCheckin]=useState(false);
   const [showMais,setShowMais]=useState(false);
   const [showQuick,setShowQuick]=useState(false);
+  const [syncing,setSyncing]=useState(false);
+  const trainingsRef=useRef([]);
 
   const loadAll=useCallback(async()=>{
     try{
@@ -1493,11 +1520,14 @@ export default function App(){
     setLoading(false);
   },[]);
 
+  useEffect(()=>{ trainingsRef.current=trainings; },[trainings]);
+
   useEffect(()=>{
     loadAll();
     const day=new Date().getDay(),h=new Date().getHours(),last=localStorage.getItem("lastCheckin");
     if(day===0&&h>=18&&last!==todayStr())setTimeout(()=>setShowCheckin(true),2000);
   },[]);
+
 
   const updXP=async(d)=>{
     if(!profile)return;const n=(profile.xp||0)+d;
@@ -1508,7 +1538,54 @@ export default function App(){
   const delMeal=async(id)=>{try{await DB.del("refeicoes",`?id=eq.${id}`);setMeals(m=>m.filter(x=>x.id!==id));}catch(e){console.error(e);}};
   const addTraining=async(data)=>{try{const [s]=await DB.post("treinos",data);setTrainings(t=>[s,...t]);await updXP(data.xp||25);}catch(e){console.error(e);}};
   const delTraining=async(id)=>{try{await DB.del("treinos",`?id=eq.${id}`);setTrainings(t=>t.filter(x=>x.id!==id));}catch(e){console.error(e);}};
-  const importTrainings=async(rows)=>{const inserted=await DB.post("treinos",rows);setTrainings(t=>[...([...inserted].reverse()),...t]);await updXP(Math.round(rows.reduce((s,r)=>s+(r.xp||25),0)*0.3));return inserted.length;};;
+  const importTrainings=async(rows)=>{const inserted=await DB.post("treinos",rows);setTrainings(t=>[...([...inserted].reverse()),...t]);await updXP(Math.round(rows.reduce((s,r)=>s+(r.xp||25),0)*0.3));return inserted.length;};
+  const runHFSync=async()=>{
+    const url=localStorage.getItem("hf_sheet_url");
+    if(!url)return 0;
+    setSyncing(true);
+    try{
+      const match=url.match(/\/d\/([a-zA-Z0-9_-]+)/);
+      const gidMatch=url.match(/gid=(\d+)/);
+      if(!match){setSyncing(false);return 0;}
+      const csvUrl=`https://docs.google.com/spreadsheets/d/${match[1]}/export?format=csv&gid=${gidMatch?.[1]||"0"}`;
+      const res=await fetch(csvUrl);if(!res.ok){setSyncing(false);return 0;}
+      const text=await res.text();
+      const rows=parseCSV(text);
+      const curr=trainingsRef.current;
+      const toInsert=[];
+      for(const row of rows){
+        const type=(row["Type"]||row[" Type "]||"").trim();
+        const mod=HF_TYPE_MAP[type];if(!mod)continue;
+        const dur=parseHFTime(row["Total Time"]);if(dur<5)continue;
+        const date=parseHFDate(row["Date"]);if(!date)continue;
+        const hora=(row["Time"]||"").slice(0,5);
+        if(curr.some(t=>t.data===date&&t.modalidade===mod.id&&(t.hora||"").slice(0,5)===hora))continue;
+        const fc=parseInt((row["Avg. Heart Rate"]||"0").replace(/\D/g,""))||0;
+        const cals=parseInt((row["Active Calories"]||"0").replace(/\D/g,""))||0;
+        const dist=(row["Distance"]||"").replace(/"/g,"").trim();
+        const parts=[dist&&dist!=="0 km"&&dist,cals&&`${cals} kcal`].filter(Boolean);
+        toInsert.push({tipo:mod.label,modalidade:mod.id,duracao:dur,fc,notas:parts.join(" · "),data:date,hora,xp:mod.xp,fonte:"apple_watch"});
+      }
+      let n=0;
+      if(toInsert.length>0)n=await importTrainings(toInsert);
+      localStorage.setItem("hf_last_sync",new Date().toISOString());
+      setSyncing(false);return n;
+    }catch(e){console.error("HF sync:",e);setSyncing(false);return 0;}
+  };
+  useEffect(()=>{
+    if(!profile)return;
+    const check=async()=>{
+      const url=localStorage.getItem("hf_sheet_url");if(!url)return;
+      const syncHour=parseInt(localStorage.getItem("hf_sync_hour")||"7");
+      const lastSync=localStorage.getItem("hf_last_sync");
+      const now=new Date();
+      const lastDate=lastSync?new Date(lastSync).toDateString():null;
+      if(lastDate!==now.toDateString()&&now.getHours()>=syncHour)await runHFSync();
+    };
+    check();
+    const iv=setInterval(check,5*60*1000);
+    return()=>clearInterval(iv);
+  },[profile?.id]);
   const addWeight=async(data)=>{try{const [s]=await DB.post("pesos",data);setWeights(w=>[s,...w]);}catch(e){console.error(e);}};
   const delWeight=async(id)=>{try{await DB.del("pesos",`?id=eq.${id}`);setWeights(w=>w.filter(x=>x.id!==id));}catch(e){console.error(e);}};
   const addComp=async(data)=>{try{const [s]=await DB.post("composicao_corporal",data);setCompositions(c=>[s,...c]);}catch(e){console.error(e);alert("Erro ao salvar composição: "+e.message);}};
@@ -1538,7 +1615,7 @@ export default function App(){
     health:<Health profile={profile} weights={weights} compositions={compositions} onAddWeight={addWeight} onAddComp={addComp} onDeleteWeight={delWeight}/>,
     journey:<Journey profile={profile} weights={weights} trainings={trainings}/>,
     habits:<Habits habits={habits} checkins={checkins} onToggle={toggleCI} onAdd={addHabit} onRemove={remHabit}/>,
-    settings:<Settings profile={profile} onUpdateProfile={setProfile}/>,
+    settings:<Settings profile={profile} onUpdateProfile={setProfile} onSyncNow={runHFSync} syncing={syncing}/>,
   };
 
   return(
