@@ -11,6 +11,10 @@ const getAK=()=>localStorage.getItem("anthropic_key")||import.meta.env.VITE_ANTH
 const GURL=()=>`https://generativelanguage.googleapis.com/v1beta/models/gemini-flash-latest:generateContent?key=${getAK()}`;
 const gParts=(d)=>d.candidates?.[0]?.content?.parts?.filter(p=>!p.thought).map(p=>p.text||"").join("")||"";
 const parseJSON=(txt)=>{if(!txt)return null;const s=txt.replace(/```json\s?/gi,"").replace(/```/g,"").trim();try{return JSON.parse(s);}catch{}const m=s.match(/\{[\s\S]*\}/);if(m)try{return JSON.parse(m[0]);}catch{}return null;};
+const HF_TYPE_MAP={"Outdoor Running":{id:"corrida",label:"Corrida",xp:35},"Indoor Running":{id:"corrida",label:"Corrida",xp:35},"Tennis":{id:"tenis",label:"Tênis",xp:25},"Outdoor Walking":{id:"caminhada",label:"Caminhada",xp:15},"Indoor Walking":{id:"caminhada",label:"Caminhada",xp:15},"Strength Training":{id:"musculacao",label:"Musculação",xp:30},"Outdoor Cycling":{id:"bike",label:"Bike",xp:30},"Indoor Cycling":{id:"bike",label:"Bike Indoor",xp:30},"Open Water Swim":{id:"natacao",label:"Natação",xp:35},"Swimming":{id:"natacao",label:"Natação",xp:35},"Mixed Cardio":{id:"hiit",label:"HIIT",xp:30},"HIIT":{id:"hiit",label:"HIIT",xp:30}};
+const parseHFTime=(t)=>{const m=t&&t.match(/(\d+)h:(\d+)m/);return m?parseInt(m[1])*60+parseInt(m[2]):0;};
+const parseHFDate=(d)=>{const p=d&&d.split("/");return p&&p.length===3?`${p[2]}-${p[1]}-${p[0]}`:null;};
+const parseCSV=(text)=>{const lines=text.trim().split("\n");const hdrs=lines[0].split(",").map(h=>h.trim().replace(/^"|"$/g,""));return lines.slice(1).map(line=>{const vals=[];let inQ=false,cur="";for(const ch of line){if(ch==='"')inQ=!inQ;else if(ch===','&&!inQ){vals.push(cur.trim());cur="";}else cur+=ch;}vals.push(cur.trim());return Object.fromEntries(hdrs.map((h,i)=>[h,(vals[i]||"").replace(/^"|"$/g,"").trim()]));});};
 async function callAI(msgs,sys="",max=1000){
   const contents=msgs.map((m,i)=>({role:m.role==="assistant"?"model":"user",parts:[{text:i===0&&sys?sys+"\n\n"+m.content:m.content}]}));
   const r=await fetch(GURL(),{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({contents,generationConfig:{maxOutputTokens:max,thinkingConfig:{thinkingBudget:0}}})});
@@ -334,7 +338,7 @@ function Dashboard({profile,meals,weights,checkins,habits,trainings,onTab}){
 }
 
 // TRAINING
-function Training({profile,trainings,onAdd,onDelete}){
+function Training({profile,trainings,onAdd,onDelete,onImport}){
   const [show,setShow]=useState(false);
   const [mod,setMod]=useState(MODALITIES[0]);
   const [dur,setDur]=useState("");
@@ -350,6 +354,64 @@ function Training({profile,trainings,onAdd,onDelete}){
   const [planoMensal,setPlanoMensal]=useState("");
   const [loadPM,setLoadPM]=useState(false);
   const [showPlanoMensal,setShowPlanoMensal]=useState(false);
+  const [showImport,setShowImport]=useState(false);
+  const [importUrl,setImportUrl]=useState("");
+  const [importing,setImporting]=useState(false);
+  const [importResult,setImportResult]=useState(null);
+  const csvRef=useRef(null);
+
+  const processCSVRows=async(rows)=>{
+    const toInsert=[];
+    for(const row of rows){
+      const type=(row["Type"]||row[" Type "]||"").trim();
+      const mod=HF_TYPE_MAP[type];
+      if(!mod)continue;
+      const dur=parseHFTime(row["Total Time"]);
+      if(dur<5)continue;
+      const date=parseHFDate(row["Date"]);
+      if(!date)continue;
+      const hora=(row["Time"]||"").slice(0,5);
+      const isDup=trainings.some(t=>t.data===date&&t.modalidade===mod.id&&(t.hora||"").slice(0,5)===hora);
+      if(isDup)continue;
+      const fc=parseInt((row["Avg. Heart Rate"]||"0").replace(/\D/g,""))||0;
+      const cals=parseInt((row["Active Calories"]||"0").replace(/\D/g,""))||0;
+      const dist=(row["Distance"]||"").replace(/"/g,"").trim();
+      const parts=[dist&&dist!=="0 km"&&dist,cals&&`${cals} kcal`,row["Temperature"]&&row["Temperature"]!=="0 C"&&row["Temperature"]].filter(Boolean);
+      toInsert.push({tipo:mod.label,modalidade:mod.id,duracao:dur,fc,notas:parts.join(" · "),data:date,hora,xp:mod.xp,fonte:"apple_watch"});
+    }
+    if(toInsert.length===0)return{imported:0,skipped:rows.length};
+    const n=await onImport(toInsert);
+    return{imported:n,skipped:rows.length-n};
+  };
+
+  const importFromUrl=async()=>{
+    setImporting(true);setImportResult(null);
+    try{
+      const match=importUrl.match(/\/d\/([a-zA-Z0-9_-]+)/);
+      const gidMatch=importUrl.match(/gid=(\d+)/);
+      if(!match)throw new Error("URL inválida. Cole a URL do Google Sheets.");
+      const csvUrl=`https://docs.google.com/spreadsheets/d/${match[1]}/export?format=csv&gid=${gidMatch?.[1]||"0"}`;
+      const res=await fetch(csvUrl);
+      if(!res.ok)throw new Error("Não foi possível acessar. Verifique se a planilha está pública.");
+      const text=await res.text();
+      const rows=parseCSV(text);
+      const result=await processCSVRows(rows);
+      setImportResult(result);
+    }catch(e){alert("Erro: "+e.message);}
+    setImporting(false);
+  };
+
+  const importFromFile=(file)=>{
+    if(!file)return;
+    setImporting(true);setImportResult(null);
+    const reader=new FileReader();
+    reader.onload=async(e)=>{
+      try{const rows=parseCSV(e.target.result);const result=await processCSVRows(rows);setImportResult(result);}
+      catch(ex){alert("Erro ao ler arquivo: "+ex.message);}
+      setImporting(false);
+    };
+    reader.readAsText(file);
+  };
 
   const analyze=async()=>{
     setLoadA(true);
@@ -393,6 +455,7 @@ function Training({profile,trainings,onAdd,onDelete}){
       </div>
       <div style={{display:"flex",gap:8,marginBottom:16,marginTop:10}}>
         <Btn onClick={()=>setShow(true)} full>+ Registrar treino</Btn>
+        <Btn onClick={()=>{setShowImport(true);setImportResult(null);}} variant="blue" style={{flexShrink:0}}>📥 Import</Btn>
         <Btn onClick={genPlan} variant="ghost" disabled={loadP} style={{flexShrink:0}}>{loadP?"...":"✦ Semana"}</Btn>
         <Btn onClick={genPlanoMensal} variant="purple" disabled={loadPM} style={{flexShrink:0}}>{loadPM?"...":"📅 Mês"}</Btn>
       </div>
@@ -489,6 +552,35 @@ function Training({profile,trainings,onAdd,onDelete}){
             {!analysis&&<Btn onClick={analyze} variant="ghost" disabled={!dur||loadA}>Analisar IA</Btn>}
             <Btn onClick={save} full disabled={!dur}>Salvar</Btn>
           </div>
+        </Sheet>
+      )}
+      {showImport&&(
+        <Sheet onClose={()=>{setShowImport(false);setImportResult(null);}} title="📥 Importar Treinos" subtitle="HealthFit · Apple Watch · Google Sheets">
+          <input ref={csvRef} type="file" accept=".csv" style={{display:"none"}} onChange={e=>importFromFile(e.target.files[0])}/>
+          {importResult?(
+            <div style={{textAlign:"center",padding:"24px 0"}}>
+              <div style={{fontSize:48,marginBottom:12}}>✅</div>
+              <p style={{fontSize:22,fontWeight:800,color:C.green,marginBottom:6}}>{importResult.imported} treinos importados</p>
+              <p style={{fontSize:13,color:C.muted,marginBottom:24}}>{importResult.skipped} já existiam ou ignorados</p>
+              <Btn onClick={()=>{setShowImport(false);setImportResult(null);}} full>Fechar</Btn>
+            </div>
+          ):(
+            <>
+              <div style={{background:"rgba(96,165,250,.08)",border:"1px solid rgba(96,165,250,.15)",borderRadius:14,padding:14,marginBottom:18}}>
+                <p style={{fontSize:12,fontWeight:700,color:C.blue,marginBottom:6}}>Como exportar do HealthFit</p>
+                <p style={{fontSize:11,color:C.muted,lineHeight:1.8}}>{"1. Abra o Google Sheets com seus treinos\n2. Cole a URL abaixo\n   OU\n3. Baixe como CSV e faça upload".split("\n").map((l,i)=><span key={i}>{l}<br/></span>)}</p>
+              </div>
+              <p style={{fontSize:10,letterSpacing:".15em",textTransform:"uppercase",color:C.dim,marginBottom:8,fontWeight:700}}>URL do Google Sheets</p>
+              <input value={importUrl} onChange={e=>setImportUrl(e.target.value)} placeholder="https://docs.google.com/spreadsheets/d/..." style={{width:"100%",background:"rgba(255,255,255,.06)",border:"1px solid rgba(255,255,255,.12)",borderRadius:12,padding:"12px 14px",fontSize:12,color:"#fff",fontFamily:"inherit",marginBottom:12,boxSizing:"border-box"}}/>
+              <Btn onClick={importFromUrl} full disabled={!importUrl.trim()||importing}>{importing?"Importando...":"🌐 Importar da URL"}</Btn>
+              <div style={{display:"flex",alignItems:"center",gap:10,margin:"14px 0"}}><div style={{flex:1,height:1,background:"rgba(255,255,255,.08)"}}/><span style={{fontSize:11,color:C.dim}}>ou</span><div style={{flex:1,height:1,background:"rgba(255,255,255,.08)"}}/></div>
+              <Btn onClick={()=>csvRef.current?.click()} variant="ghost" full disabled={importing}>📂 Upload CSV</Btn>
+              {importing&&<Spin text="Importando treinos"/>}
+              <div style={{marginTop:16,background:"rgba(250,204,21,.06)",border:"1px solid rgba(250,204,21,.12)",borderRadius:12,padding:12}}>
+                <p style={{fontSize:10,color:C.dim,lineHeight:1.7}}>Tipos importados: Corrida · Tênis · Caminhada · Musculação · Bike · Natação · HIIT. Duplicatas são ignoradas automaticamente.</p>
+              </div>
+            </>
+          )}
         </Sheet>
       )}
     </div>
@@ -1416,6 +1508,7 @@ export default function App(){
   const delMeal=async(id)=>{try{await DB.del("refeicoes",`?id=eq.${id}`);setMeals(m=>m.filter(x=>x.id!==id));}catch(e){console.error(e);}};
   const addTraining=async(data)=>{try{const [s]=await DB.post("treinos",data);setTrainings(t=>[s,...t]);await updXP(data.xp||25);}catch(e){console.error(e);}};
   const delTraining=async(id)=>{try{await DB.del("treinos",`?id=eq.${id}`);setTrainings(t=>t.filter(x=>x.id!==id));}catch(e){console.error(e);}};
+  const importTrainings=async(rows)=>{const inserted=await DB.post("treinos",rows);setTrainings(t=>[...([...inserted].reverse()),...t]);await updXP(Math.round(rows.reduce((s,r)=>s+(r.xp||25),0)*0.3));return inserted.length;};;
   const addWeight=async(data)=>{try{const [s]=await DB.post("pesos",data);setWeights(w=>[s,...w]);}catch(e){console.error(e);}};
   const delWeight=async(id)=>{try{await DB.del("pesos",`?id=eq.${id}`);setWeights(w=>w.filter(x=>x.id!==id));}catch(e){console.error(e);}};
   const addComp=async(data)=>{try{const [s]=await DB.post("composicao_corporal",data);setCompositions(c=>[s,...c]);}catch(e){console.error(e);alert("Erro ao salvar composição: "+e.message);}};
@@ -1440,7 +1533,7 @@ export default function App(){
 
   const pages={
     home:<Dashboard profile={profile} meals={meals} weights={weights} checkins={checkins} habits={habits} trainings={trainings} onTab={setTab}/>,
-    training:<Training profile={profile} trainings={trainings} onAdd={addTraining} onDelete={delTraining}/>,
+    training:<Training profile={profile} trainings={trainings} onAdd={addTraining} onDelete={delTraining} onImport={importTrainings}/>,
     nutrition:<Nutrition profile={profile} meals={meals} onAdd={addMeal} onDelete={delMeal}/>,
     health:<Health profile={profile} weights={weights} compositions={compositions} onAddWeight={addWeight} onAddComp={addComp} onDeleteWeight={delWeight}/>,
     journey:<Journey profile={profile} weights={weights} trainings={trainings}/>,
