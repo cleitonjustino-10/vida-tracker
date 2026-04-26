@@ -15,6 +15,14 @@ const HF_TYPE_MAP={"Outdoor Running":{id:"corrida",label:"Corrida",xp:35},"Indoo
 const parseHFTime=(t)=>{const m=t&&t.match(/(\d+)h:(\d+)m/);return m?parseInt(m[1])*60+parseInt(m[2]):0;};
 const parseHFDate=(d)=>{const p=d&&d.split("/");return p&&p.length===3?`${p[2]}-${p[1]}-${p[0]}`:null;};
 const parseCSV=(text)=>{const lines=text.trim().split("\n");const hdrs=lines[0].split(",").map(h=>h.trim().replace(/^"|"$/g,""));return lines.slice(1).map(line=>{const vals=[];let inQ=false,cur="";for(const ch of line){if(ch==='"')inQ=!inQ;else if(ch===','&&!inQ){vals.push(cur.trim());cur="";}else cur+=ch;}vals.push(cur.trim());return Object.fromEntries(hdrs.map((h,i)=>[h,(vals[i]||"").replace(/^"|"$/g,"").trim()]));});};
+const parseHNum=(v)=>{if(!v||!v.trim())return null;const n=parseFloat(v.replace(/[^\d.,]/g,"").replace(",","."));return isNaN(n)?null:n;};
+const parseHealthRows=(rows,existing=[])=>rows.reduce((acc,row)=>{
+  const date=parseHFDate((row["Date"]||"").trim());if(!date)return acc;
+  if(existing.some(e=>e.data===date))return acc;
+  const r={data:date,active_energy:parseHNum(row["Active Energy"]),resting_energy:parseHNum(row["Resting Energy"]),fc_repouso:parseHNum(row["Resting"]),hrv:parseHNum(row["HRV"]),steps:parseHNum(row["Steps"]),vo2max:parseHNum(row["VO₂ max"])||parseHNum(row["VO2 max"]),exercise_minutes:parseHNum(row["Exercise Minutes"]),stand_hours:parseHNum(row["Stand Hours"])};
+  if(Object.values(r).slice(1).every(v=>v===null))return acc;
+  return [...acc,r];
+},[]);
 async function callAI(msgs,sys="",max=1000){
   const contents=msgs.map((m,i)=>({role:m.role==="assistant"?"model":"user",parts:[{text:i===0&&sys?sys+"\n\n"+m.content:m.content}]}));
   const r=await fetch(GURL(),{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({contents,generationConfig:{maxOutputTokens:max,thinkingConfig:{thinkingBudget:0}}})});
@@ -812,7 +820,7 @@ function Nutrition({profile,meals,onAdd,onDelete}){
 }
 
 // HEALTH — 3 subtabs: Peso / Xiaomi / Exames
-function Health({profile,weights,compositions,onAddWeight,onAddComp,onDeleteWeight}){
+function Health({profile,weights,compositions,saudeDaily=[],onAddWeight,onAddComp,onDeleteWeight}){
   const [sub,setSub]=useState("peso");
   const [showW,setShowW]=useState(false);
   const [showX,setShowX]=useState(false);
@@ -922,7 +930,7 @@ function Health({profile,weights,compositions,onAddWeight,onAddComp,onDeleteWeig
   return(
     <div style={{padding:"22px 18px",paddingBottom:170}}>
       <div style={{marginBottom:20}}><h2 style={{fontFamily:"'Clash Display',sans-serif",fontSize:26,fontWeight:700,marginBottom:4}}>Saúde 📊</h2><p style={{fontSize:12,color:C.muted}}>Peso · Composição · Exames · Medidas</p></div>
-      <Tabs2 tabs={[{id:"peso",label:"Peso"},{id:"comp",label:"Xiaomi"},{id:"exames",label:"Exames"},{id:"medidas",label:"Medidas"}]} active={sub} onChange={setSub}/>
+      <Tabs2 tabs={[{id:"peso",label:"Peso"},{id:"watch",label:"⌚ Watch"},{id:"comp",label:"Xiaomi"},{id:"exames",label:"Exames"},{id:"medidas",label:"Medidas"}]} active={sub} onChange={setSub}/>
 
       {sub==="peso"&&(
         <>
@@ -961,6 +969,71 @@ function Health({profile,weights,compositions,onAddWeight,onAddComp,onDeleteWeig
           }
         </>
       )}
+
+      {sub==="watch"&&(()=>{
+        const today=saudeDaily[0];
+        const last30=saudeDaily.slice(0,30);
+        const hrvArr=last30.filter(d=>d.hrv>0);
+        const stepsArr=last30.filter(d=>d.steps>0);
+        const fcArr=last30.filter(d=>d.fc_repouso>0);
+        const hrvAvg=hrvArr.length?Math.round(hrvArr.reduce((s,d)=>s+d.hrv,0)/hrvArr.length):null;
+        const hrvHoje=today?.hrv||null;
+        const hrvStatus=hrvHoje&&hrvAvg?(hrvHoje>=hrvAvg*1.05?"Ótimo":hrvHoje>=hrvAvg*0.9?"Normal":"Atenção"):null;
+        const hrvColor=hrvStatus==="Ótimo"?C.green:hrvStatus==="Normal"?C.yellow:C.red;
+        const stepsHoje=today?.steps||0;
+        const fcHoje=today?.fc_repouso||null;
+        const vo2=saudeDaily.find(d=>d.vo2max)?.vo2max||null;
+        const MiniBar=({arr,valKey,color,height=48})=>{
+          if(!arr.length)return null;
+          const vals=arr.map(d=>d[valKey]);
+          const mn=Math.min(...vals),mx=Math.max(...vals),range=mx-mn||1;
+          return<div style={{display:"flex",gap:2,alignItems:"flex-end",height}}>{[...arr].reverse().map((d,i)=>{const h=8+((d[valKey]-mn)/range)*(height-8);return<div key={i} style={{flex:1,height:h,borderRadius:3,background:i===arr.length-1?color:`${color}55`}}/>;})}</div>;
+        };
+        return(
+          <>
+            <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:10,marginBottom:16}}>
+              {[
+                {label:"HRV",value:hrvHoje?`${hrvHoje} ms`:"-",sub:hrvStatus?`${hrvStatus} · média ${hrvAvg}ms`:"Sem dado",color:hrvColor,emoji:"❤️‍🔥"},
+                {label:"FC Repouso",value:fcHoje?`${fcHoje} bpm`:"-",sub:fcHoje?(fcHoje<60?"Atlético":fcHoje<70?"Bom":"Monitorar"):"",color:fcHoje&&fcHoje<60?C.green:fcHoje&&fcHoje<70?C.yellow:C.red,emoji:"💗"},
+                {label:"Passos",value:stepsHoje?stepsHoje.toLocaleString("pt-BR"):"-",sub:stepsHoje>=8000?"Meta atingida":stepsHoje>0?`${Math.round(stepsHoje/100)}% da meta`:"",color:stepsHoje>=8000?C.green:C.blue,emoji:"👟"},
+                {label:"VO₂ max",value:vo2?`${vo2} ml/kg`:"-",sub:vo2?(vo2>=50?"Elite":vo2>=40?"Bom":vo2>=35?"Moderado":"Baixo"):"",color:vo2&&vo2>=50?C.green:vo2&&vo2>=40?C.yellow:C.red,emoji:"🫁"},
+              ].map((s,i)=>(
+                <Card key={i} style={{padding:14}}>
+                  <div style={{display:"flex",alignItems:"center",gap:8,marginBottom:8}}>
+                    <span style={{fontSize:18}}>{s.emoji}</span>
+                    <p style={{fontSize:10,color:C.dim,letterSpacing:".12em",textTransform:"uppercase",fontWeight:700}}>{s.label}</p>
+                  </div>
+                  <p style={{fontFamily:"'Clash Display',sans-serif",fontSize:20,fontWeight:700,color:s.color,marginBottom:4}}>{s.value}</p>
+                  <p style={{fontSize:10,color:C.muted}}>{s.sub}</p>
+                </Card>
+              ))}
+            </div>
+            {hrvArr.length>3&&<Card style={{marginBottom:12}}><p style={{fontSize:10,color:C.dim,letterSpacing:".12em",textTransform:"uppercase",fontWeight:700,marginBottom:10}}>HRV — últimos {hrvArr.length} dias</p><MiniBar arr={hrvArr} valKey="hrv" color={C.green}/></Card>}
+            {stepsArr.length>3&&<Card style={{marginBottom:12}}><p style={{fontSize:10,color:C.dim,letterSpacing:".12em",textTransform:"uppercase",fontWeight:700,marginBottom:10}}>Passos diários</p><MiniBar arr={stepsArr} valKey="steps" color={C.blue}/></Card>}
+            {fcArr.length>3&&<Card style={{marginBottom:12}}><p style={{fontSize:10,color:C.dim,letterSpacing:".12em",textTransform:"uppercase",fontWeight:700,marginBottom:10}}>FC Repouso (menor = melhor)</p><MiniBar arr={fcArr} valKey="fc_repouso" color={C.red} height={40}/></Card>}
+            <SLbl>Histórico recente</SLbl>
+            {saudeDaily.length===0?<div style={{textAlign:"center",padding:"32px 0",color:C.dim}}><p style={{fontSize:32,marginBottom:8}}>⌚</p><p style={{fontSize:13}}>Configure o sync em Configurações → Watch</p></div>:
+              saudeDaily.slice(0,14).map((d,i)=>(
+                <Card key={i} style={{marginBottom:8,padding:12}}>
+                  <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:6}}>
+                    <p style={{fontSize:13,fontWeight:700}}>{fmt(d.data)}</p>
+                    <div style={{display:"flex",gap:6}}>
+                      {d.hrv&&<Badge color={C.green}>HRV {d.hrv}</Badge>}
+                      {d.fc_repouso&&<Badge color={C.red}>FC {d.fc_repouso}</Badge>}
+                    </div>
+                  </div>
+                  <div style={{display:"flex",gap:12,flexWrap:"wrap"}}>
+                    {d.steps&&<span style={{fontSize:11,color:C.muted}}>👟 {d.steps.toLocaleString("pt-BR")}</span>}
+                    {d.active_energy&&<span style={{fontSize:11,color:C.muted}}>🔥 {d.active_energy} kcal</span>}
+                    {d.exercise_minutes&&<span style={{fontSize:11,color:C.muted}}>⏱ {d.exercise_minutes}min</span>}
+                    {d.vo2max&&<span style={{fontSize:11,color:C.blue}}>🫁 VO₂ {d.vo2max}</span>}
+                  </div>
+                </Card>
+              ))
+            }
+          </>
+        );
+      })()}
 
       {sub==="comp"&&(
         <>
@@ -1299,7 +1372,7 @@ function Habits({habits,checkins,onToggle,onAdd,onRemove}){
 }
 
 // SETTINGS
-function Settings({profile,onUpdateProfile,onSyncNow,syncing}){
+function Settings({profile,onUpdateProfile,onSyncNow,syncing,onSyncHealthNow,syncingHealth}){
   const [sub,setSub]=useState("perfil");
   const [f,setF]=useState({nome:profile?.nome||"",sexo:profile?.sexo||"M",idade:String(profile?.idade||""),peso:String(profile?.peso||""),altura:String(profile?.altura||""),peso_meta:String(profile?.peso_meta||""),cal_meta:String(profile?.cal_meta||""),prot_meta:String(profile?.prot_meta||"")});
   const set=(k,v)=>setF(p=>({...p,[k]:v}));
@@ -1317,6 +1390,12 @@ function Settings({profile,onUpdateProfile,onSyncNow,syncing}){
   const [syncResult,setSyncResult]=useState(null);
   const lastSync=localStorage.getItem("hf_last_sync");
   const lastSyncFmt=lastSync?new Date(lastSync).toLocaleString("pt-BR",{day:"2-digit",month:"2-digit",hour:"2-digit",minute:"2-digit"}):"Nunca";
+  const [hwUrl,setHwUrl]=useState(()=>localStorage.getItem("hw_sheet_url")||"");
+  const [hwHour,setHwHour]=useState(()=>localStorage.getItem("hw_sync_hour")||"7");
+  const [hwSaved,setHwSaved]=useState(false);
+  const [syncHealthResult,setSyncHealthResult]=useState(null);
+  const lastHealthSync=localStorage.getItem("hw_last_sync");
+  const lastHealthSyncFmt=lastHealthSync?new Date(lastHealthSync).toLocaleString("pt-BR",{day:"2-digit",month:"2-digit",hour:"2-digit",minute:"2-digit"}):"Nunca";
   useEffect(()=>{DB.get("configuracoes","?chave=eq.webhook_url").then(r=>{if(r?.[0]?.valor)setWebhook(r[0].valor);}).catch(()=>{});}, []);
   const save=async()=>{
     setSaving(true);
@@ -1398,6 +1477,25 @@ function Settings({profile,onUpdateProfile,onSyncNow,syncing}){
             <div style={{display:"flex",gap:8}}>
               <Btn onClick={()=>{localStorage.setItem("hf_sheet_url",hfUrl);localStorage.setItem("hf_sync_hour",hfHour);setHfSaved(true);setTimeout(()=>setHfSaved(false),2000);}} variant={hfUrl?"green":"primary"} full>{hfSaved?"✓ Salvo!":"Salvar"}</Btn>
               {hfUrl&&<Btn onClick={async()=>{const n=await onSyncNow();setSyncResult(n);setTimeout(()=>setSyncResult(null),4000);}} variant="blue" disabled={syncing} style={{flexShrink:0}}>{syncing?"Sincronizando...":syncResult!==null?`✓ ${syncResult} novo(s)`:"Sync agora"}</Btn>}
+            </div>
+          </Card>
+          <Card style={{marginBottom:16,background:hwUrl?"rgba(74,222,128,.06)":"rgba(167,139,250,.06)",border:hwUrl?`1px solid rgba(74,222,128,.2)`:`1px solid rgba(167,139,250,.2)`}}>
+            <div style={{display:"flex",alignItems:"center",gap:12,marginBottom:14}}>
+              <div style={{width:40,height:40,borderRadius:12,background:"rgba(167,139,250,.15)",display:"flex",alignItems:"center",justifyContent:"center",fontSize:20}}>❤️‍🔥</div>
+              <div>
+                <p style={{fontSize:14,fontWeight:700,marginBottom:2}}>Auto-sync Saúde diária</p>
+                <p style={{fontSize:11,color:hwUrl?C.green:C.muted}}>{hwUrl?`✓ Sync diário às ${hwHour}h · Último: ${lastHealthSyncFmt}`:"HRV · Passos · FC Repouso · VO₂max"}</p>
+              </div>
+            </div>
+            <p style={{fontSize:10,letterSpacing:".14em",textTransform:"uppercase",color:C.dim,marginBottom:8,fontWeight:700}}>URL do Google Sheets (Saúde)</p>
+            <input value={hwUrl} onChange={e=>setHwUrl(e.target.value)} placeholder="https://docs.google.com/spreadsheets/d/..." style={{width:"100%",background:"rgba(255,255,255,.05)",border:"1.5px solid rgba(255,255,255,.1)",borderRadius:10,padding:"11px 14px",color:"#fff",fontSize:12,outline:"none",fontFamily:"inherit",marginBottom:10,boxSizing:"border-box"}}/>
+            <p style={{fontSize:10,letterSpacing:".14em",textTransform:"uppercase",color:C.dim,marginBottom:8,fontWeight:700}}>Horário do sync diário</p>
+            <select value={hwHour} onChange={e=>setHwHour(e.target.value)} style={{width:"100%",background:"#1e293b",border:"1.5px solid rgba(255,255,255,.1)",borderRadius:10,padding:"11px 14px",color:"#fff",fontSize:13,fontFamily:"inherit",marginBottom:12,outline:"none"}}>
+              {Array.from({length:24},(_,i)=><option key={i} value={String(i)}>{String(i).padStart(2,"0")}:00</option>)}
+            </select>
+            <div style={{display:"flex",gap:8}}>
+              <Btn onClick={()=>{localStorage.setItem("hw_sheet_url",hwUrl);localStorage.setItem("hw_sync_hour",hwHour);setHwSaved(true);setTimeout(()=>setHwSaved(false),2000);}} variant={hwUrl?"green":"primary"} full>{hwSaved?"✓ Salvo!":"Salvar"}</Btn>
+              {hwUrl&&<Btn onClick={async()=>{const n=await onSyncHealthNow();setSyncHealthResult(n);setTimeout(()=>setSyncHealthResult(null),4000);}} variant="purple" disabled={syncingHealth} style={{flexShrink:0}}>{syncingHealth?"Sincronizando...":syncHealthResult!==null?`✓ ${syncHealthResult} novo(s)`:"Sync agora"}</Btn>}
             </div>
           </Card>
           <Card>
@@ -1501,11 +1599,15 @@ export default function App(){
   const [showMais,setShowMais]=useState(false);
   const [showQuick,setShowQuick]=useState(false);
   const [syncing,setSyncing]=useState(false);
+  const [syncingHealth,setSyncingHealth]=useState(false);
+  const [saudeDaily,setSaudeDaily]=useState([]);
   const trainingsRef=useRef([]);
+  const saudeDailyRef=useRef([]);
+  useEffect(()=>{ saudeDailyRef.current=saudeDaily; },[saudeDaily]);
 
   const loadAll=useCallback(async()=>{
     try{
-      const [p,m,t,h,c,w,comp]=await Promise.all([
+      const [p,m,t,h,c,w,comp,sd]=await Promise.all([
         DB.get("perfil","?order=created_at.desc&limit=1"),
         DB.get("refeicoes","?order=created_at.desc&limit=300"),
         DB.get("treinos","?order=created_at.desc&limit=100"),
@@ -1513,9 +1615,10 @@ export default function App(){
         DB.get("checkins_habitos","?order=created_at.desc&limit=500"),
         DB.get("pesos","?order=created_at.desc&limit=90"),
         DB.get("composicao_corporal","?order=created_at.desc&limit=30").catch(()=>[]),
+        DB.get("saude_diaria","?order=data.desc&limit=400").catch(()=>[]),
       ]);
       if(p?.length)setProfile(p[0]);
-      setMeals(m||[]);setTrainings(t||[]);setHabits(h||[]);setCheckins(c||[]);setWeights(w||[]);setCompositions(comp||[]);
+      setMeals(m||[]);setTrainings(t||[]);setHabits(h||[]);setCheckins(c||[]);setWeights(w||[]);setCompositions(comp||[]);setSaudeDaily(sd||[]);
     }catch(e){console.error(e);}
     setLoading(false);
   },[]);
@@ -1586,6 +1689,37 @@ export default function App(){
     const iv=setInterval(check,5*60*1000);
     return()=>clearInterval(iv);
   },[profile?.id]);
+  const importSaudeDaily=async(rows)=>{const inserted=await DB.post("saude_diaria",rows);setSaudeDaily(s=>[...[...inserted].sort((a,b)=>b.data.localeCompare(a.data)),...s]);return inserted.length;};
+  const runHealthSync=async()=>{
+    const url=localStorage.getItem("hw_sheet_url");
+    if(!url)return 0;
+    setSyncingHealth(true);
+    try{
+      const match=url.match(/\/d\/([a-zA-Z0-9_-]+)/);
+      const gidMatch=url.match(/gid=(\d+)/);
+      if(!match){setSyncingHealth(false);return 0;}
+      const csvUrl=`https://docs.google.com/spreadsheets/d/${match[1]}/export?format=csv&gid=${gidMatch?.[1]||"0"}`;
+      const res=await fetch(csvUrl);if(!res.ok){setSyncingHealth(false);return 0;}
+      const rows=parseCSV(await res.text());
+      const toInsert=parseHealthRows(rows,saudeDailyRef.current);
+      let n=0;if(toInsert.length>0)n=await importSaudeDaily(toInsert);
+      localStorage.setItem("hw_last_sync",new Date().toISOString());
+      setSyncingHealth(false);return n;
+    }catch(e){console.error("Health sync:",e);setSyncingHealth(false);return 0;}
+  };
+  useEffect(()=>{
+    if(!profile)return;
+    const check=async()=>{
+      const url=localStorage.getItem("hw_sheet_url");if(!url)return;
+      const syncHour=parseInt(localStorage.getItem("hw_sync_hour")||"7");
+      const lastSync=localStorage.getItem("hw_last_sync");
+      const now=new Date();
+      if((!lastSync||new Date(lastSync).toDateString()!==now.toDateString())&&now.getHours()>=syncHour)await runHealthSync();
+    };
+    check();
+    const iv=setInterval(check,5*60*1000);
+    return()=>clearInterval(iv);
+  },[profile?.id]);
   const addWeight=async(data)=>{try{const [s]=await DB.post("pesos",data);setWeights(w=>[s,...w]);}catch(e){console.error(e);}};
   const delWeight=async(id)=>{try{await DB.del("pesos",`?id=eq.${id}`);setWeights(w=>w.filter(x=>x.id!==id));}catch(e){console.error(e);}};
   const addComp=async(data)=>{try{const [s]=await DB.post("composicao_corporal",data);setCompositions(c=>[s,...c]);}catch(e){console.error(e);alert("Erro ao salvar composição: "+e.message);}};
@@ -1612,10 +1746,10 @@ export default function App(){
     home:<Dashboard profile={profile} meals={meals} weights={weights} checkins={checkins} habits={habits} trainings={trainings} onTab={setTab}/>,
     training:<Training profile={profile} trainings={trainings} onAdd={addTraining} onDelete={delTraining} onImport={importTrainings}/>,
     nutrition:<Nutrition profile={profile} meals={meals} onAdd={addMeal} onDelete={delMeal}/>,
-    health:<Health profile={profile} weights={weights} compositions={compositions} onAddWeight={addWeight} onAddComp={addComp} onDeleteWeight={delWeight}/>,
+    health:<Health profile={profile} weights={weights} compositions={compositions} saudeDaily={saudeDaily} onAddWeight={addWeight} onAddComp={addComp} onDeleteWeight={delWeight}/>,
     journey:<Journey profile={profile} weights={weights} trainings={trainings}/>,
     habits:<Habits habits={habits} checkins={checkins} onToggle={toggleCI} onAdd={addHabit} onRemove={remHabit}/>,
-    settings:<Settings profile={profile} onUpdateProfile={setProfile} onSyncNow={runHFSync} syncing={syncing}/>,
+    settings:<Settings profile={profile} onUpdateProfile={setProfile} onSyncNow={runHFSync} syncing={syncing} onSyncHealthNow={runHealthSync} syncingHealth={syncingHealth}/>,
   };
 
   return(
