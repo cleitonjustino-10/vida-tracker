@@ -10,15 +10,14 @@ const DB={get:(t,q="")=>sbq("GET",t,null,q),post:(t,b)=>sbq("POST",t,b),patch:(t
 const getAK=()=>localStorage.getItem("anthropic_key")||import.meta.env.VITE_ANTHROPIC_KEY||"";
 const GURL=()=>`https://generativelanguage.googleapis.com/v1/models/gemini-1.5-flash-latest:generateContent?key=${getAK()}`;
 async function callAI(msgs,sys="",max=1000){
-  const body={contents:msgs.map(m=>({role:m.role==="assistant"?"model":"user",parts:[{text:m.content}]})),generationConfig:{maxOutputTokens:max}};
-  if(sys)body.systemInstruction={parts:[{text:sys}]};
-  const r=await fetch(GURL(),{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify(body)});
+  const contents=msgs.map((m,i)=>({role:m.role==="assistant"?"model":"user",parts:[{text:i===0&&sys?sys+"\n\n"+m.content:m.content}]}));
+  const r=await fetch(GURL(),{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({contents,generationConfig:{maxOutputTokens:max}})});
   const d=await r.json();if(d.error)throw new Error(d.error.message);
   return d.candidates?.[0]?.content?.parts?.map(p=>p.text||"").join("")||"";
 }
 const compressImg=(dataUrl,maxPx=1100)=>new Promise(res=>{const img=new Image();img.onload=()=>{const ratio=Math.min(maxPx/img.width,maxPx/img.height,1);const c=document.createElement("canvas");c.width=Math.round(img.width*ratio);c.height=Math.round(img.height*ratio);c.getContext("2d").drawImage(img,0,0,c.width,c.height);res(c.toDataURL("image/jpeg",0.82));};img.src=dataUrl;});
 async function callVision(b64,mime,prompt){
-  const body={contents:[{parts:[{inlineData:{mimeType:mime,data:b64}},{text:prompt}]}],systemInstruction:{parts:[{text:"Retorne APENAS JSON válido sem markdown."}]},generationConfig:{maxOutputTokens:2000}};
+  const body={contents:[{parts:[{inlineData:{mimeType:mime,data:b64}},{text:"Retorne APENAS JSON válido sem markdown.\n\n"+prompt}]}],generationConfig:{maxOutputTokens:2000}};
   const r=await fetch(GURL(),{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify(body)});
   const d=await r.json();if(d.error)throw new Error(d.error.message);
   const txt=d.candidates?.[0]?.content?.parts?.map(p=>p.text||"").join("")||"{}";
@@ -792,7 +791,7 @@ function Health({profile,weights,compositions,onAddWeight,onAddComp,onDeleteWeig
       try{
         let r;
         if(isPdf){
-          const body={contents:[{parts:[{inlineData:{mimeType:"application/pdf",data:e.target.result.split(",")[1]}},{text:ep}]}],systemInstruction:{parts:[{text:"Retorne APENAS JSON válido sem markdown."}]},generationConfig:{maxOutputTokens:3000}};
+          const body={contents:[{parts:[{inlineData:{mimeType:"application/pdf",data:e.target.result.split(",")[1]}},{text:"Retorne APENAS JSON válido sem markdown.\n\n"+ep}]}],generationConfig:{maxOutputTokens:3000}};
           const res=await fetch(GURL(),{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify(body)});
           const d=await res.json();if(d.error)throw new Error(d.error.message);
           const txt=d.candidates?.[0]?.content?.parts?.map(p=>p.text||"").join("")||"{}";
