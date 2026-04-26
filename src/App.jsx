@@ -18,6 +18,10 @@ const parseCSV=(text)=>{const lines=text.trim().split("\n");const hdrs=lines[0].
 const parseHNum=(v)=>{if(!v||!v.trim())return null;const n=parseFloat(v.replace(/[^\d.,]/g,"").replace(",","."));return isNaN(n)?null:n;};
 const TACO_UNIDADES={"ovo":[{label:"1 ovo pequeno (40g)",gramas:40},{label:"1 ovo médio (50g)",gramas:50},{label:"1 ovo grande (60g)",gramas:60}],"banana":[{label:"1 banana pequena (70g)",gramas:70},{label:"1 banana média (90g)",gramas:90},{label:"1 banana grande (120g)",gramas:120}],"arroz":[{label:"1 concha pequena (80g)",gramas:80},{label:"1 concha média (100g)",gramas:100},{label:"1 concha grande (130g)",gramas:130}],"feijao":[{label:"1 concha pequena (80g)",gramas:80},{label:"1 concha média (100g)",gramas:100},{label:"1 concha grande (130g)",gramas:130}],"frango":[{label:"1 filé pequeno (100g)",gramas:100},{label:"1 filé médio (150g)",gramas:150},{label:"1 filé grande (200g)",gramas:200}],"pao":[{label:"1 unidade (50g)",gramas:50},{label:"2 unidades (100g)",gramas:100}],"batata":[{label:"1 pequena (100g)",gramas:100},{label:"1 média (150g)",gramas:150},{label:"1 grande (200g)",gramas:200}],"leite":[{label:"1 copo (200ml)",gramas:200},{label:"1 copo grande (300ml)",gramas:300}],"iogurte":[{label:"1 pote pequeno (170g)",gramas:170},{label:"1 pote (200g)",gramas:200}],"azeite":[{label:"1 col. sopa rasa (7g)",gramas:7},{label:"1 col. sopa (10g)",gramas:10},{label:"1 col. sopa cheia (15g)",gramas:15}],"salmao":[{label:"1 filé pequeno (100g)",gramas:100},{label:"1 filé médio (150g)",gramas:150},{label:"1 filé grande (200g)",gramas:200}],"atum":[{label:"1 lata pequena (120g)",gramas:120},{label:"1 lata grande (170g)",gramas:170}],"tapioca":[{label:"1 pequena (50g)",gramas:50},{label:"1 média (80g)",gramas:80},{label:"1 grande (100g)",gramas:100}],"tilapia":[{label:"1 filé pequeno (100g)",gramas:100},{label:"1 filé médio (150g)",gramas:150}],"whey":[{label:"1 dose (30g)",gramas:30},{label:"1 dose (35g)",gramas:35}]};
 const getTacoUnidades=(nome)=>{const n=nome.toLowerCase();for(const[k,v]of Object.entries(TACO_UNIDADES))if(n.includes(k))return v;return null;};
+const ZONE_COLORS=["#334155","#64748b","#60a5fa","#34d399","#fbbf24","#f87171"];
+const ZONE_LABELS=["Repouso","Z1 Leve","Z2 Fat","Z3 Aeróbico","Z4 Limiar","Z5 Máximo"];
+const parseZonas=(row)=>{const z={};["HRZ0","HRZ1","HRZ2","HRZ3","HRZ4","HRZ5"].forEach((k,i)=>{const v=parseHFTime(row[k]||"");if(v>0)z[`z${i}`]=v;});return Object.keys(z).length>0?z:null;};
+const calcStreak=(trainings,meals,checkins)=>{let n=0;const now=new Date();for(let i=0;i<=365;i++){const d=new Date(now);d.setDate(d.getDate()-i);const k=d.toISOString().slice(0,10);const ok=trainings.some(t=>t.data===k)||meals.some(m=>m.data===k)||checkins.some(c=>c.data===k);if(!ok)break;n++;}return n;};
 const parseHealthRows=(rows,existing=[])=>rows.reduce((acc,row)=>{
   const date=parseHFDate((row["Date"]||"").trim());if(!date)return acc;
   if(existing.some(e=>e.data===date))return acc;
@@ -150,6 +154,21 @@ const Tabs2=({tabs,active,onChange})=>(
     {tabs.map(t=><button key={t.id} onClick={()=>onChange(t.id)} style={{flex:1,padding:"9px 4px",borderRadius:11,border:"none",cursor:"pointer",fontFamily:"inherit",transition:"all .2s",background:active===t.id?"rgba(250,204,21,.12)":"transparent",color:active===t.id?C.yellow:C.muted,fontWeight:active===t.id?800:400,fontSize:10,borderBottom:active===t.id?"2px solid #facc15":"2px solid transparent"}}>{t.label}</button>)}
   </div>
 );
+const ZonasBar=({zonas})=>{
+  if(!zonas)return null;
+  const total=Object.values(zonas).reduce((s,v)=>s+v,0);
+  if(total===0)return null;
+  return(
+    <div style={{marginTop:10}}>
+      <div style={{display:"flex",height:5,borderRadius:3,overflow:"hidden"}}>
+        {[0,1,2,3,4,5].map(i=>{const v=zonas[`z${i}`]||0;if(!v)return null;return<div key={i} style={{width:`${(v/total)*100}%`,background:ZONE_COLORS[i]}}/>;} )}
+      </div>
+      <div style={{display:"flex",gap:4,marginTop:5,flexWrap:"wrap"}}>
+        {[0,1,2,3,4,5].map(i=>{const v=zonas[`z${i}`]||0;if(!v)return null;return<span key={i} style={{fontSize:9,color:ZONE_COLORS[i],background:`${ZONE_COLORS[i]}18`,padding:"2px 7px",borderRadius:6,fontWeight:700}}>{ZONE_LABELS[i]} {v}m</span>;})}
+      </div>
+    </div>
+  );
+};
 
 // ONBOARDING
 function Onboarding({onSave}){
@@ -210,18 +229,45 @@ function Dashboard({profile,meals,weights,checkins,habits,trainings,onTab}){
   const cal=tm.reduce((s,m)=>s+(m.calorias||0),0),prot=tm.reduce((s,m)=>s+(m.proteina||0),0);
   const ctd=checkins.filter(c=>c.data===tk);
   const lvl=getLvl(profile.xp||0),xpB=XPL[lvl]||0,xpN=XPL[lvl+1]||20000;
-  const xpP=Math.min(100,(((profile.xp||0)-xpB)/(xpN-xpB))*100);
   const lw=weights[0]?.peso||profile.peso,lost=Math.max(0,(profile.peso||0)-(lw||0));
   const days=Math.max(1,Math.floor((new Date()-new Date(profile.data_criacao||tk))/86400000)+1);
   const week=Array.from({length:7},(_,i)=>{const d=new Date();d.setDate(d.getDate()-6+i);const k=d.toISOString().slice(0,10);return{k,dw:["D","S","T","Q","Q","S","S"][d.getDay()],cal:meals.filter(m=>m.data===k).reduce((s,m)=>s+(m.calorias||0),0),tr:trainings.some(t=>t.data===k),today:k===tk};});
   const treinouHoje=trainings.some(t=>t.data===tk);
   const calCiclo=treinouHoje?Math.round((profile.cal_meta||2800)*1.1):Math.round((profile.cal_meta||2800)*0.9);
-  const calDiff=calCiclo-(profile.cal_meta||2800);
-  const tipoCiclo=treinouHoje?"treino":"descanso";
+  const calDiff=Math.abs(calCiclo-(profile.cal_meta||2800));
   const pausaAtiva=localStorage.getItem("pausa_ativa")==="true";
   const pausaMotivo=localStorage.getItem("pausa_motivo");
   const pausaInicio=localStorage.getItem("pausa_inicio");
   const pausaDias=pausaInicio?Math.floor((new Date()-new Date(pausaInicio))/86400000):0;
+  const hour=new Date().getHours();
+  const showProtAlert=prot<(profile.prot_meta*0.7)&&hour>=14;
+  const protRestante=(profile.prot_meta||0)-prot;
+  const streak=calcStreak(trainings,meals,checkins);
+  const dateNow=new Date();
+  const dayNames=["Domingo","Segunda","Terça","Quarta","Quinta","Sexta","Sábado"];
+  const monthNames=["jan","fev","mar","abr","mai","jun","jul","ago","set","out","nov","dez"];
+  const greeting=hour<12?"Bom dia":hour<18?"Boa tarde":"Boa noite";
+
+  const pesoHoje=weights.some(w=>w.data===tk);
+  const cafeHoje=tm.some(m=>m.tipo==="cafe");
+  const almocoHoje=tm.some(m=>m.tipo==="almoco");
+  const jantarHoje=tm.some(m=>m.tipo==="jantar");
+  const protOk=prot>=(profile.prot_meta||0)*0.8;
+  const habitosOk=habits.length>0&&ctd.length>=(habits.length*0.7);
+  const aguaOk=aguaCopos>=12;
+  const checkItems=[
+    {id:"peso",emoji:"⚖️",label:"Peso do dia",done:pesoHoje,tab:"health",meta:pesoHoje?`${lw}kg`:"Registrar →"},
+    {id:"treino",emoji:"🏋️",label:"Treino",done:treinouHoje,tab:"training",meta:treinouHoje?(trainings.find(t=>t.data===tk)?.tipo||"✓"):"Registrar →"},
+    {id:"cafe",emoji:"☕",label:"Café da manhã",done:cafeHoje,tab:"nutrition",meta:cafeHoje?`${tm.filter(m=>m.tipo==="cafe").reduce((s,m)=>s+(m.calorias||0),0)}kcal`:"Registrar →"},
+    {id:"almoco",emoji:"🍽️",label:"Almoço",done:almocoHoje,tab:"nutrition",meta:almocoHoje?`${tm.filter(m=>m.tipo==="almoco").reduce((s,m)=>s+(m.calorias||0),0)}kcal`:"Registrar →"},
+    {id:"jantar",emoji:"🌙",label:"Jantar",done:jantarHoje,tab:"nutrition",meta:jantarHoje?`${tm.filter(m=>m.tipo==="jantar").reduce((s,m)=>s+(m.calorias||0),0)}kcal`:"Registrar →"},
+    {id:"prot",emoji:"💪",label:"Proteína ≥80%",done:protOk,tab:"nutrition",meta:`${prot}/${profile.prot_meta}g`},
+    {id:"habitos",emoji:"🔥",label:"Hábitos ≥70%",done:habitosOk,tab:"habits",meta:`${ctd.length}/${habits.length}`},
+    {id:"agua",emoji:"💧",label:"Hidratação",done:aguaOk,tab:"home",meta:`${aguaCopos}/16`},
+  ];
+  const doneCt=checkItems.filter(x=>x.done).length;
+  const pctDay=Math.round((doneCt/checkItems.length)*100);
+
   useEffect(()=>{
     const cached=localStorage.getItem("dashInsight"),cachedDate=localStorage.getItem("dashInsightDate");
     if(cached&&cachedDate===todayStr()){setInsight(cached);return;}
@@ -233,10 +279,6 @@ function Dashboard({profile,meals,weights,checkins,habits,trainings,onTab}){
   const recentW=weights.filter(w=>new Date(w.data+"T12:00:00")>=d14);
   const isPlateauActive=recentW.length>=2&&(Math.max(...recentW.map(w=>w.peso))-Math.min(...recentW.map(w=>w.peso)))<0.5;
   const plateauDays=isPlateauActive?Math.round((new Date()-new Date(recentW[recentW.length-1].data+"T12:00:00"))/86400000):0;
-  const hour=new Date().getHours();
-  const showProtAlert=prot<(profile.prot_meta*0.7)&&hour>=14;
-  const protRestante=(profile.prot_meta||0)-prot;
-  const blocosAgua=[{label:"Manhã",horario:"06–12h",meta:4,emoji:"🌅"},{label:"Tarde",horario:"12–17h",meta:5,emoji:"☀️"},{label:"Pré-treino",horario:"17–19h",meta:4,emoji:"🏋️"},{label:"Noite",horario:"19–23h",meta:3,emoji:"🌙"}];
   const addCopo=()=>{const n=Math.min(aguaCopos+1,16);setAguaCopos(n);localStorage.setItem("agua_"+todayStr(),n);};
   const removeCopo=()=>{const n=Math.max(aguaCopos-1,0);setAguaCopos(n);localStorage.setItem("agua_"+todayStr(),n);};
   const analyzePlateau=async()=>{
@@ -249,100 +291,179 @@ function Dashboard({profile,meals,weights,checkins,habits,trainings,onTab}){
     setLoadingPlateau(false);
   };
   return(
-    <div style={{padding:"22px 18px",paddingBottom:170}}>
-      <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:24}}>
-        <div><p style={{fontSize:11,color:C.dim,letterSpacing:".1em",textTransform:"uppercase",marginBottom:4}}>Dia {days} · Jornada Ultraman</p><h1 style={{fontFamily:"'Clash Display',sans-serif",fontSize:30,fontWeight:700,lineHeight:1.1}}>Olá, <span style={{color:C.yellow}}>{profile.nome?.split(" ")[0]}</span> 💪</h1></div>
-        <Ring value={days} max={180} size={58} sw={5} color={C.yellow}><span style={{fontSize:10,fontWeight:900,color:C.yellow}}>{Math.round((days/180)*100)}%</span></Ring>
-      </div>
-      {pausaAtiva&&<div style={{background:"rgba(251,146,60,0.1)",border:"1px solid rgba(251,146,60,0.3)",borderRadius:16,padding:14,marginBottom:16}}><div style={{display:"flex",justifyContent:"space-between",alignItems:"center"}}><div><p style={{fontSize:13,fontWeight:700,color:C.orange,marginBottom:3}}>⏸️ Modo pausa ativo — {pausaDias} dias</p><p style={{fontSize:11,color:C.muted}}>{pausaMotivo} · Sem cobrança de hábitos</p></div><button onClick={()=>onTab("settings")} style={{background:"rgba(251,146,60,0.2)",border:"1px solid rgba(251,146,60,0.4)",borderRadius:10,padding:"8px 12px",color:C.orange,fontSize:11,fontWeight:800,cursor:"pointer",fontFamily:"inherit"}}>Retomar</button></div></div>}
-      <div style={{display:"flex",alignItems:"center",gap:12,marginBottom:20,padding:"12px 16px",background:C.card,borderRadius:16,boxShadow:"0 2px 8px rgba(0,0,0,.3)"}}>
-        <div style={{width:28,height:28,borderRadius:9,background:"linear-gradient(135deg,#fbbf24,#f59e0b)",display:"flex",alignItems:"center",justifyContent:"center",fontSize:12,fontWeight:900,color:"#000",flexShrink:0}}>{lvl}</div>
-        <div style={{flex:1}}>
-          <div style={{display:"flex",justifyContent:"space-between",marginBottom:5}}>
-            <span style={{fontSize:12,fontWeight:700,color:C.yellow}}>{LVLN[lvl]}</span>
-            <span style={{fontSize:10,color:C.dim}}>{(profile.xp||0).toLocaleString()} XP · {Math.round(xpP)}%</span>
-          </div>
-          <Bar value={profile.xp||0} max={xpN}/>
-        </div>
-      </div>
-      <div style={{display:"grid",gridTemplateColumns:"1fr 1fr 1fr",gap:12,marginBottom:20}}>
-        {[{v:cal,max:calCiclo,c:C.yellow,l:"KCAL",s:`/${calCiclo}`},{v:prot,max:profile.prot_meta||336,c:C.green,l:"PROT",s:`/${profile.prot_meta}g`},{v:ctd.length,max:habits.length||1,c:C.yellow,l:"HÁBITOS",s:`/${habits.length}`}].map((r,i)=>(
-          <Card key={i} style={{padding:"16px 10px",display:"flex",flexDirection:"column",alignItems:"center",gap:10}}>
-            <Ring value={r.v} max={r.max} size={56} sw={5} color={r.c}><span style={{fontSize:11,fontWeight:900,color:r.c}}>{r.v}</span></Ring>
-            <p style={{fontSize:9,color:C.dim,letterSpacing:".1em",textAlign:"center"}}>{r.l}<br/><span style={{color:C.muted,fontSize:10}}>{r.s}</span></p>
-          </Card>
-        ))}
-      </div>
-      {showProtAlert&&(
-        <div style={{background:"rgba(251,191,36,0.08)",border:"1px solid rgba(251,191,36,0.2)",borderRadius:18,padding:18,marginBottom:20}}>
-          <div style={{display:"flex",alignItems:"center",gap:10,marginBottom:8}}>
-            <span style={{fontSize:22}}>💪</span>
-            <p style={{fontSize:14,fontWeight:700,color:C.yellow}}>Proteína em risco — só {prot}g de {profile.prot_meta}g hoje</p>
-          </div>
-          <p style={{fontSize:12,color:C.muted,marginBottom:14,lineHeight:1.6}}>Você precisa de {protRestante}g nas próximas refeições para proteger o músculo.</p>
-          <div style={{display:"flex",gap:8,flexWrap:"wrap"}}>
-            {["🥚 4 ovos = ~24g","🍗 150g frango = ~46g","🥛 1 whey = ~25g"].map((s,i)=>(
-              <span key={i} style={{background:"rgba(251,191,36,0.12)",borderRadius:20,padding:"6px 12px",fontSize:11,color:C.yellow}}>{s}</span>
-            ))}
-          </div>
-        </div>
-      )}
-      <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:12,marginBottom:20}}>
-        <Card style={{padding:20}}><p style={{fontSize:9,color:C.dim,letterSpacing:".12em",textTransform:"uppercase",marginBottom:10}}>Peso atual</p><p style={{fontFamily:"'Clash Display',sans-serif",fontSize:32,fontWeight:700,color:C.yellow,marginBottom:6}}>{lw}<span style={{fontSize:14,color:C.muted,fontWeight:400}}> kg</span></p><Badge color={C.green}>-{lost.toFixed(1)}kg perdidos</Badge></Card>
-        <Card style={{padding:20}}><p style={{fontSize:9,color:C.dim,letterSpacing:".12em",textTransform:"uppercase",marginBottom:10}}>Faltam</p><p style={{fontFamily:"'Clash Display',sans-serif",fontSize:32,fontWeight:700,color:"#fff",marginBottom:6}}>{Math.max(0,(lw||0)-(profile.peso_meta||0)).toFixed(1)}<span style={{fontSize:14,color:C.muted,fontWeight:400}}> kg</span></p><Bar value={lost} max={(profile.peso||0)-(profile.peso_meta||0)} color={C.green} h={5}/></Card>
-      </div>
-      {isPlateauActive&&(
-        <div style={{background:"rgba(251,146,60,0.08)",borderRadius:20,padding:20,marginBottom:20,boxShadow:"0 2px 8px rgba(0,0,0,.3)"}}>
-          <p style={{fontSize:13,fontWeight:700,color:"rgba(251,146,60,1)",marginBottom:12}}>⚠️ Plateau detectado — {plateauDays} dias sem variação</p>
-          <Btn onClick={analyzePlateau} disabled={loadingPlateau} full>{loadingPlateau?"Analisando...":"Analisar com Coach IA"}</Btn>
-          {plateauAnalysis&&<p style={{fontSize:13,color:"rgba(255,255,255,0.7)",lineHeight:1.7,marginTop:12,whiteSpace:"pre-line"}}>{plateauAnalysis}</p>}
-        </div>
-      )}
-      <div style={{background:"rgba(251,191,36,0.06)",borderRadius:20,padding:20,marginBottom:20,position:"relative",overflow:"hidden",boxShadow:"0 2px 8px rgba(0,0,0,.3)"}}>
-        <div style={{position:"absolute",top:0,left:0,right:0,height:2,background:"linear-gradient(90deg,transparent,rgba(251,191,36,.5),transparent)"}}/>
-        <div style={{display:"flex",gap:14,alignItems:"flex-start"}}>
-          <div style={{width:38,height:38,borderRadius:12,background:"rgba(251,191,36,.1)",display:"flex",alignItems:"center",justifyContent:"center",fontSize:18,flexShrink:0}}>🧠</div>
-          <div style={{flex:1}}><p style={{fontSize:10,letterSpacing:".16em",textTransform:"uppercase",color:C.yellow,fontWeight:700,marginBottom:8}}>Coach IA · Musy + Cariani</p>{insight?<p style={{fontSize:14,color:"rgba(255,255,255,.75)",lineHeight:1.75}}>{insight}</p>:<Spin text="Gerando insight"/>}{insight&&<div style={{marginTop:12,paddingTop:12,borderTop:"1px solid rgba(255,255,255,0.06)",display:"flex",gap:6,flexWrap:"wrap"}}>{[{l:"📊 Estou em plateau",prompt:"plateau"},{l:"🍽️ Vou comer fora",prompt:"comer_fora"},{l:"📋 Plano da semana",prompt:"plano_semana"},{l:"💪 Proteger músculo",prompt:"proteger_musculo"}].map(acao=><button key={acao.prompt} onClick={async()=>{setInsight("...");const lw=weights[0]?.peso||profile?.peso;const last7=meals.filter(m=>new Date()-new Date(m.data)<=7*86400000);const avgProt=last7.length>0?Math.round(last7.reduce((s,m)=>s+(m.proteina||0),0)/7):0;const wkTrain=trainings.filter(t=>new Date()-new Date(t.data)<7*86400000).length;const prompts={plateau:`Cleiton, ${lw}kg (meta ${profile.peso_meta}kg), proteína média ${avgProt}g/${profile.prot_meta}g, ${wkTrain} treinos essa semana. Está em plateau. Dê 3 ações concretas e diretas para quebrar o plateau agora.`,comer_fora:`Cleiton vai comer fora hoje. Meta calórica: ${profile.cal_meta}kcal. Proteína meta: ${profile.prot_meta}g. Já consumiu hoje: ${cal}kcal e ${prot}g de proteína. Dê uma estratégia prática: o que pedir, o que evitar e como compensar no restante do dia.`,plano_semana:`Crie um plano objetivo para Cleiton essa semana. Peso: ${lw}kg, meta: ${profile.peso_meta}kg. Treinos na semana passada: ${wkTrain}. Proteína média: ${avgProt}g/${profile.prot_meta}g. Plano com: dias de treino recomendados, meta de proteína diária e 1 ajuste prioritário na alimentação. Seja direto e específico.`,proteger_musculo:`Cleiton está em déficit calórico. Peso: ${lw}kg, ${profile.prot_meta}g de proteína/dia. Proteína média essa semana: ${avgProt}g. Dê 4 estratégias específicas para preservar massa muscular durante o emagrecimento. Foco em prática, não teoria.`};try{const r=await callAI([{role:"user",content:prompts[acao.prompt]}],"Coach Paulo Musy + Renato Cariani. Português direto. Máximo 5 frases.",400);setInsight(r);}catch{setInsight("Erro ao carregar. Tente novamente.");}}} style={{padding:"7px 12px",borderRadius:20,fontSize:11,border:"1px solid rgba(250,204,21,0.25)",background:"rgba(250,204,21,0.08)",color:C.yellow,cursor:"pointer",fontFamily:"inherit",fontWeight:600,whiteSpace:"nowrap",transition:"all 0.2s"}}>{acao.l}</button>)}</div>}</div>
-        </div>
-      </div>
-      <div style={{background:treinouHoje?"rgba(74,222,128,0.08)":"rgba(96,165,250,0.08)",border:`1px solid ${treinouHoje?"rgba(74,222,128,0.25)":"rgba(96,165,250,0.25)"}`,borderRadius:16,padding:14,marginBottom:14}}>
-        <div style={{display:"flex",justifyContent:"space-between",alignItems:"center"}}>
+    <div style={{paddingBottom:180}}>
+      {/* HEADER */}
+      <div style={{padding:"52px 20px 14px"}}>
+        <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start"}}>
           <div>
-            <p style={{fontSize:11,fontWeight:700,marginBottom:3,color:treinouHoje?C.green:C.blue}}>{treinouHoje?"⚡ Dia de treino":"😴 Dia de descanso"}</p>
-            <p style={{fontSize:13,fontWeight:800,color:treinouHoje?C.green:C.blue}}>Meta ajustada: {calCiclo} kcal</p>
-            <p style={{fontSize:11,color:C.muted,marginTop:2}}>{treinouHoje?`+${calDiff} kcal — carboidratos extras para recuperação`:`${calDiff} kcal — déficit maior no descanso`}</p>
+            <p style={{fontSize:11,color:C.dim,letterSpacing:".1em",textTransform:"uppercase",marginBottom:4}}>{dayNames[dateNow.getDay()]}, {dateNow.getDate()} {monthNames[dateNow.getMonth()]}</p>
+            <h1 style={{fontFamily:"'Clash Display',sans-serif",fontSize:26,fontWeight:700,lineHeight:1.15}}>{greeting}, <span style={{color:C.yellow}}>{profile.nome?.split(" ")[0]}</span></h1>
           </div>
-          <div style={{width:48,height:48,borderRadius:14,flexShrink:0,background:treinouHoje?"rgba(74,222,128,0.15)":"rgba(96,165,250,0.15)",display:"flex",alignItems:"center",justifyContent:"center",fontSize:24}}>{treinouHoje?"🏋️":"🛋️"}</div>
+          <div style={{display:"flex",flexDirection:"column",alignItems:"center",background:"rgba(251,191,36,.08)",border:"1px solid rgba(251,191,36,.2)",borderRadius:14,padding:"8px 14px",gap:1,minWidth:52}}>
+            <span style={{fontSize:18}}>🔥</span>
+            <span style={{fontFamily:"'Clash Display',sans-serif",fontSize:20,fontWeight:700,color:C.yellow,lineHeight:1}}>{streak}</span>
+            <span style={{fontSize:9,color:C.dim,letterSpacing:".06em"}}>dias</span>
+          </div>
         </div>
-        {treinouHoje&&<div style={{marginTop:10,paddingTop:10,borderTop:"1px solid rgba(255,255,255,0.06)"}}><p style={{fontSize:11,color:C.muted,lineHeight:1.6}}>💡 Priorize carboidratos na refeição pós-treino para repor glicogênio e proteger o músculo.</p></div>}
       </div>
-      <Card style={{marginBottom:20}}>
-        <SLbl>Semana — calorias & treinos</SLbl>
-        <div style={{display:"flex",gap:6,alignItems:"flex-end",height:60}}>
-          {week.map((d,i)=>{const pct=Math.min(1,d.cal/(profile.cal_meta||2800)),h=8+pct*46;return(<div key={i} style={{flex:1,display:"flex",flexDirection:"column",alignItems:"center",gap:4}}>{d.tr&&<div style={{width:6,height:6,borderRadius:"50%",background:C.green,marginBottom:2}}/>}<div style={{width:"100%",height:h,borderRadius:4,background:d.cal>(profile.cal_meta||2800)?"rgba(248,113,113,.4)":d.today?C.yellow:"rgba(250,204,21,.22)",boxShadow:d.today?"0 0 8px rgba(250,204,21,.35)":"none"}}/><span style={{fontSize:8,color:d.today?C.yellow:C.dim}}>{d.dw}</span></div>);})}
+
+      {/* DAY PROGRESS */}
+      <div style={{padding:"0 20px",marginBottom:14}}>
+        <div style={{background:C.card,borderRadius:20,padding:"16px 18px",boxShadow:"0 2px 8px rgba(0,0,0,.35)"}}>
+          <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:10}}>
+            <div>
+              <p style={{fontSize:13,fontWeight:700,marginBottom:2}}>Progresso do dia</p>
+              <p style={{fontSize:11,color:C.muted}}>{doneCt} de {checkItems.length} itens · Dia {days}</p>
+            </div>
+            <Ring value={doneCt} max={checkItems.length} size={52} sw={5} color={pctDay===100?C.green:C.yellow}>
+              <span style={{fontSize:11,fontWeight:900,color:pctDay===100?C.green:C.yellow}}>{pctDay}%</span>
+            </Ring>
+          </div>
+          <Bar value={doneCt} max={checkItems.length} color={pctDay===100?C.green:C.yellow} h={4}/>
+          {pctDay===100&&<p style={{fontSize:11,color:C.green,fontWeight:700,marginTop:8,textAlign:"center"}}>🏆 Dia perfeito! Continue assim.</p>}
         </div>
-      </Card>
-      <Card style={{marginBottom:20}}>
-        <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:12}}>
-          <div><p style={{fontSize:13,fontWeight:700,marginBottom:2}}>💧 Hidratação</p><p style={{fontSize:11,color:C.muted}}>{aguaCopos} de 16 copos · {(aguaCopos*250/1000).toFixed(1)}L de 4L</p></div>
-          <div style={{display:"flex",gap:8,alignItems:"center"}}>
-            <button onClick={removeCopo} style={{width:32,height:32,borderRadius:"50%",border:"none",background:"rgba(255,255,255,0.07)",color:C.muted,fontSize:18,cursor:"pointer",fontFamily:"inherit"}}>−</button>
-            <span style={{fontFamily:"'Clash Display',sans-serif",fontSize:22,fontWeight:700,color:C.blue,minWidth:28,textAlign:"center"}}>{aguaCopos}</span>
-            <button onClick={addCopo} style={{width:32,height:32,borderRadius:"50%",border:"none",background:"rgba(96,165,250,0.2)",color:C.blue,fontSize:18,cursor:"pointer",fontFamily:"inherit"}}>+</button>
+      </div>
+
+      {/* CHECKLIST */}
+      <div style={{padding:"0 20px",marginBottom:14}}>
+        <p style={{fontSize:10,letterSpacing:".16em",textTransform:"uppercase",color:C.dim,marginBottom:9,fontWeight:700}}>Check-in do dia</p>
+        <div style={{display:"flex",flexDirection:"column",gap:6}}>
+          {checkItems.map(item=>(
+            <div key={item.id} onClick={item.tab!=="home"?()=>onTab(item.tab):undefined}
+              style={{display:"flex",alignItems:"center",gap:11,padding:"13px 15px",borderRadius:15,cursor:item.tab!=="home"?"pointer":"default",border:item.done?"1.5px solid rgba(74,222,128,.2)":"1px solid rgba(255,255,255,.07)",background:item.done?"rgba(74,222,128,.06)":C.card,transition:"all .2s",WebkitTapHighlightColor:"transparent",minHeight:52}}>
+              <div style={{width:24,height:24,borderRadius:7,border:item.done?`2px solid ${C.green}`:"2px solid rgba(255,255,255,.15)",background:item.done?C.green:"transparent",display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0,transition:"all .2s"}}>
+                {item.done&&<span style={{fontSize:11,color:"#000",fontWeight:900}}>✓</span>}
+              </div>
+              <span style={{fontSize:17,flexShrink:0}}>{item.emoji}</span>
+              <p style={{flex:1,fontSize:13,fontWeight:item.done?500:700,color:item.done?"rgba(255,255,255,.5)":"#fff",textDecoration:item.done?"line-through":"none",textDecorationColor:"rgba(255,255,255,.2)"}}>{item.label}</p>
+              <span style={{fontSize:11,color:item.done?C.green:"rgba(255,255,255,.3)",fontWeight:item.done?700:400,flexShrink:0,textAlign:"right"}}>{item.meta}</span>
+            </div>
+          ))}
+        </div>
+      </div>
+
+      {pausaAtiva&&(
+        <div style={{padding:"0 20px",marginBottom:14}}>
+          <div style={{background:"rgba(251,146,60,0.1)",border:"1px solid rgba(251,146,60,0.3)",borderRadius:16,padding:14}}>
+            <div style={{display:"flex",justifyContent:"space-between",alignItems:"center"}}>
+              <div><p style={{fontSize:13,fontWeight:700,color:C.orange,marginBottom:3}}>⏸️ Pausa ativa — {pausaDias} dias</p><p style={{fontSize:11,color:C.muted}}>{pausaMotivo}</p></div>
+              <button onClick={()=>onTab("settings")} style={{background:"rgba(251,146,60,0.2)",border:"1px solid rgba(251,146,60,0.4)",borderRadius:10,padding:"8px 12px",color:C.orange,fontSize:11,fontWeight:800,cursor:"pointer",fontFamily:"inherit"}}>Retomar</button>
+            </div>
           </div>
         </div>
-        <Bar value={aguaCopos} max={16} color={C.blue} h={6}/>
-        <div style={{display:"grid",gridTemplateColumns:"1fr 1fr 1fr 1fr",gap:6,marginTop:14}}>
-          {blocosAgua.map((b,i)=>{const ant=blocosAgua.slice(0,i).reduce((s,x)=>s+x.meta,0),cur=Math.min(Math.max(0,aguaCopos-ant),b.meta),ok=cur>=b.meta;return(
-            <div key={i} style={{background:ok?"rgba(96,165,250,0.15)":"rgba(255,255,255,0.04)",border:ok?"1px solid rgba(96,165,250,0.3)":"1px solid rgba(255,255,255,0.07)",borderRadius:12,padding:"10px 8px",textAlign:"center"}}>
-              <p style={{fontSize:16,marginBottom:4}}>{b.emoji}</p>
-              <p style={{fontSize:9,color:ok?C.blue:C.dim,fontWeight:700,marginBottom:2}}>{b.label}</p>
-              <p style={{fontSize:9,color:C.dim}}>{b.horario}</p>
-              <p style={{fontSize:11,fontWeight:800,color:ok?C.blue:C.muted,marginTop:4}}>{cur}/{b.meta}</p>
+      )}
+
+      {/* XP */}
+      <div style={{padding:"0 20px",marginBottom:14}}>
+        <div style={{display:"flex",alignItems:"center",gap:12,padding:"12px 16px",background:C.card,borderRadius:16}}>
+          <div style={{width:28,height:28,borderRadius:9,background:"linear-gradient(135deg,#fbbf24,#f59e0b)",display:"flex",alignItems:"center",justifyContent:"center",fontSize:12,fontWeight:900,color:"#000",flexShrink:0}}>{lvl}</div>
+          <div style={{flex:1}}>
+            <div style={{display:"flex",justifyContent:"space-between",marginBottom:5}}>
+              <span style={{fontSize:12,fontWeight:700,color:C.yellow}}>{LVLN[lvl]}</span>
+              <span style={{fontSize:10,color:C.dim}}>{(profile.xp||0).toLocaleString()} XP</span>
             </div>
-          );})}
+            <Bar value={profile.xp||0} max={xpN}/>
+          </div>
         </div>
-      </Card>
+      </div>
+
+      {/* MACROS */}
+      <div style={{padding:"0 20px",marginBottom:14}}>
+        <div style={{display:"grid",gridTemplateColumns:"1fr 1fr 1fr",gap:10}}>
+          {[{v:cal,max:calCiclo,c:C.yellow,l:"KCAL",s:`/${calCiclo}`},{v:prot,max:profile.prot_meta||336,c:C.green,l:"PROT",s:`/${profile.prot_meta}g`},{v:ctd.length,max:habits.length||1,c:C.purple,l:"HÁBITOS",s:`/${habits.length}`}].map((r,i)=>(
+            <Card key={i} style={{padding:"14px 8px",display:"flex",flexDirection:"column",alignItems:"center",gap:8}}>
+              <Ring value={r.v} max={r.max} size={50} sw={5} color={r.c}><span style={{fontSize:10,fontWeight:900,color:r.c}}>{r.v}</span></Ring>
+              <p style={{fontSize:9,color:C.dim,letterSpacing:".1em",textAlign:"center"}}>{r.l}<br/><span style={{color:C.muted,fontSize:9}}>{r.s}</span></p>
+            </Card>
+          ))}
+        </div>
+      </div>
+
+      {/* WEIGHT */}
+      <div style={{padding:"0 20px",marginBottom:14}}>
+        <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:10}}>
+          <Card style={{padding:16}}><p style={{fontSize:9,color:C.dim,letterSpacing:".12em",textTransform:"uppercase",marginBottom:6}}>Peso atual</p><p style={{fontFamily:"'Clash Display',sans-serif",fontSize:28,fontWeight:700,color:C.yellow,marginBottom:4}}>{lw}<span style={{fontSize:12,color:C.muted,fontWeight:400}}> kg</span></p><Badge color={C.green}>-{lost.toFixed(1)}kg perdidos</Badge></Card>
+          <Card style={{padding:16}}><p style={{fontSize:9,color:C.dim,letterSpacing:".12em",textTransform:"uppercase",marginBottom:6}}>Faltam</p><p style={{fontFamily:"'Clash Display',sans-serif",fontSize:28,fontWeight:700,color:"#fff",marginBottom:4}}>{Math.max(0,(lw||0)-(profile.peso_meta||0)).toFixed(1)}<span style={{fontSize:12,color:C.muted,fontWeight:400}}> kg</span></p><Bar value={lost} max={(profile.peso||0)-(profile.peso_meta||0)} color={C.green} h={4}/></Card>
+        </div>
+      </div>
+
+      {showProtAlert&&(
+        <div style={{padding:"0 20px",marginBottom:14}}>
+          <div style={{background:"rgba(251,191,36,0.08)",border:"1px solid rgba(251,191,36,0.2)",borderRadius:16,padding:16}}>
+            <div style={{display:"flex",alignItems:"center",gap:10,marginBottom:8}}><span style={{fontSize:20}}>💪</span><p style={{fontSize:13,fontWeight:700,color:C.yellow}}>Proteína em risco — só {prot}g</p></div>
+            <p style={{fontSize:12,color:C.muted,marginBottom:12,lineHeight:1.6}}>Faltam {protRestante}g nas próximas refeições.</p>
+            <div style={{display:"flex",gap:7,flexWrap:"wrap"}}>{["🥚 4 ovos=24g","🍗 150g frango=46g","🥛 whey=25g"].map((s,i)=><span key={i} style={{background:"rgba(251,191,36,0.12)",borderRadius:18,padding:"5px 10px",fontSize:11,color:C.yellow}}>{s}</span>)}</div>
+          </div>
+        </div>
+      )}
+
+      {/* AI INSIGHT */}
+      <div style={{padding:"0 20px",marginBottom:14}}>
+        <div style={{background:"rgba(251,191,36,0.06)",borderRadius:18,padding:16,position:"relative",overflow:"hidden",boxShadow:"0 2px 8px rgba(0,0,0,.3)"}}>
+          <div style={{position:"absolute",top:0,left:0,right:0,height:2,background:"linear-gradient(90deg,transparent,rgba(251,191,36,.5),transparent)"}}/>
+          <div style={{display:"flex",gap:12,alignItems:"flex-start"}}>
+            <div style={{width:34,height:34,borderRadius:10,background:"rgba(251,191,36,.1)",display:"flex",alignItems:"center",justifyContent:"center",fontSize:16,flexShrink:0}}>🧠</div>
+            <div style={{flex:1}}>
+              <p style={{fontSize:10,letterSpacing:".16em",textTransform:"uppercase",color:C.yellow,fontWeight:700,marginBottom:6}}>Coach IA · Musy + Cariani</p>
+              {insight?<p style={{fontSize:13,color:"rgba(255,255,255,.75)",lineHeight:1.75}}>{insight}</p>:<Spin text="Gerando insight"/>}
+              {insight&&<div style={{marginTop:10,display:"flex",gap:6,flexWrap:"wrap"}}>
+                {[{l:"📊 Plateau",prompt:"plateau"},{l:"🍽️ Comer fora",prompt:"comer_fora"},{l:"📋 Semana",prompt:"plano_semana"},{l:"💪 Músculo",prompt:"proteger_musculo"}].map(acao=>
+                  <button key={acao.prompt} onClick={async()=>{setInsight("...");const lw2=weights[0]?.peso||profile?.peso;const last7=meals.filter(m=>new Date()-new Date(m.data)<=7*86400000);const avgProt=last7.length>0?Math.round(last7.reduce((s,m)=>s+(m.proteina||0),0)/7):0;const wkTrain=trainings.filter(t=>new Date()-new Date(t.data)<7*86400000).length;const prompts={plateau:`Cleiton, ${lw2}kg (meta ${profile.peso_meta}kg), proteína média ${avgProt}g/${profile.prot_meta}g, ${wkTrain} treinos essa semana. Está em plateau. Dê 3 ações concretas e diretas para quebrar o plateau agora.`,comer_fora:`Cleiton vai comer fora hoje. Meta calórica: ${profile.cal_meta}kcal. Proteína meta: ${profile.prot_meta}g. Já consumiu hoje: ${cal}kcal e ${prot}g de proteína. Dê uma estratégia prática: o que pedir, o que evitar e como compensar no restante do dia.`,plano_semana:`Crie um plano objetivo para Cleiton essa semana. Peso: ${lw2}kg, meta: ${profile.peso_meta}kg. Treinos na semana passada: ${wkTrain}. Proteína média: ${avgProt}g/${profile.prot_meta}g. Plano com: dias de treino recomendados, meta de proteína diária e 1 ajuste prioritário na alimentação. Seja direto e específico.`,proteger_musculo:`Cleiton está em déficit calórico. Peso: ${lw2}kg, ${profile.prot_meta}g de proteína/dia. Proteína média essa semana: ${avgProt}g. Dê 4 estratégias específicas para preservar massa muscular durante o emagrecimento. Foco em prática, não teoria.`};try{const r=await callAI([{role:"user",content:prompts[acao.prompt]}],"Coach Paulo Musy + Renato Cariani. Português direto. Máximo 5 frases.",400);setInsight(r);}catch{setInsight("Erro ao carregar. Tente novamente.");}}} style={{padding:"6px 10px",borderRadius:16,fontSize:10,border:"1px solid rgba(250,204,21,0.25)",background:"rgba(250,204,21,0.08)",color:C.yellow,cursor:"pointer",fontFamily:"inherit",fontWeight:600,whiteSpace:"nowrap"}}>{acao.l}</button>
+                )}
+              </div>}
+            </div>
+          </div>
+        </div>
+      </div>
+
+      {/* CALORIE CYCLE */}
+      <div style={{padding:"0 20px",marginBottom:14}}>
+        <div style={{background:treinouHoje?"rgba(74,222,128,0.08)":"rgba(96,165,250,0.08)",border:`1px solid ${treinouHoje?"rgba(74,222,128,0.25)":"rgba(96,165,250,0.25)"}`,borderRadius:16,padding:14}}>
+          <div style={{display:"flex",justifyContent:"space-between",alignItems:"center"}}>
+            <div>
+              <p style={{fontSize:11,fontWeight:700,marginBottom:3,color:treinouHoje?C.green:C.blue}}>{treinouHoje?"⚡ Dia de treino":"😴 Dia de descanso"}</p>
+              <p style={{fontSize:14,fontWeight:800,color:treinouHoje?C.green:C.blue}}>Meta: {calCiclo} kcal</p>
+              <p style={{fontSize:11,color:C.muted,marginTop:2}}>{treinouHoje?`+${calDiff} kcal para recuperação`:`-${calDiff} kcal déficit maior`}</p>
+            </div>
+            <div style={{width:44,height:44,borderRadius:13,background:treinouHoje?"rgba(74,222,128,0.15)":"rgba(96,165,250,0.15)",display:"flex",alignItems:"center",justifyContent:"center",fontSize:22}}>{treinouHoje?"🏋️":"🛋️"}</div>
+          </div>
+        </div>
+      </div>
+
+      {isPlateauActive&&(
+        <div style={{padding:"0 20px",marginBottom:14}}>
+          <div style={{background:"rgba(251,146,60,0.08)",borderRadius:18,padding:18}}>
+            <p style={{fontSize:13,fontWeight:700,color:"rgba(251,146,60,1)",marginBottom:12}}>⚠️ Plateau — {plateauDays} dias sem variação</p>
+            <Btn onClick={analyzePlateau} disabled={loadingPlateau} full>{loadingPlateau?"Analisando...":"Analisar com Coach IA"}</Btn>
+            {plateauAnalysis&&<p style={{fontSize:13,color:"rgba(255,255,255,0.7)",lineHeight:1.7,marginTop:12,whiteSpace:"pre-line"}}>{plateauAnalysis}</p>}
+          </div>
+        </div>
+      )}
+
+      {/* WEEKLY CHART */}
+      <div style={{padding:"0 20px",marginBottom:14}}>
+        <Card>
+          <SLbl>Semana — calorias & treinos</SLbl>
+          <div style={{display:"flex",gap:6,alignItems:"flex-end",height:54}}>
+            {week.map((d,i)=>{const pct=Math.min(1,d.cal/(profile.cal_meta||2800)),h=8+pct*40;return(<div key={i} style={{flex:1,display:"flex",flexDirection:"column",alignItems:"center",gap:4}}>{d.tr&&<div style={{width:5,height:5,borderRadius:"50%",background:C.green,marginBottom:1}}/>}<div style={{width:"100%",height:h,borderRadius:4,background:d.cal>(profile.cal_meta||2800)?"rgba(248,113,113,.4)":d.today?C.yellow:"rgba(250,204,21,.2)",boxShadow:d.today?"0 0 8px rgba(250,204,21,.35)":"none"}}/><span style={{fontSize:8,color:d.today?C.yellow:C.dim}}>{d.dw}</span></div>);})}
+          </div>
+        </Card>
+      </div>
+
+      {/* WATER */}
+      <div style={{padding:"0 20px"}}>
+        <Card>
+          <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:10}}>
+            <div><p style={{fontSize:13,fontWeight:700,marginBottom:2}}>💧 Hidratação</p><p style={{fontSize:11,color:C.muted}}>{aguaCopos}/16 copos · {(aguaCopos*250/1000).toFixed(1)}L de 4L</p></div>
+            <div style={{display:"flex",gap:10,alignItems:"center"}}>
+              <button onClick={removeCopo} style={{width:36,height:36,borderRadius:"50%",border:"none",background:"rgba(255,255,255,0.07)",color:C.muted,fontSize:20,cursor:"pointer",fontFamily:"inherit",display:"flex",alignItems:"center",justifyContent:"center"}}>−</button>
+              <span style={{fontFamily:"'Clash Display',sans-serif",fontSize:24,fontWeight:700,color:C.blue,minWidth:30,textAlign:"center"}}>{aguaCopos}</span>
+              <button onClick={addCopo} style={{width:36,height:36,borderRadius:"50%",border:"none",background:"rgba(96,165,250,0.2)",color:C.blue,fontSize:20,cursor:"pointer",fontFamily:"inherit",display:"flex",alignItems:"center",justifyContent:"center"}}>+</button>
+            </div>
+          </div>
+          <Bar value={aguaCopos} max={16} color={C.blue} h={6}/>
+        </Card>
+      </div>
     </div>
   );
 }
@@ -387,7 +508,7 @@ function Training({profile,trainings,onAdd,onDelete,onImport}){
       const cals=parseInt((row["Active Calories"]||"0").replace(/\D/g,""))||0;
       const dist=(row["Distance"]||"").replace(/"/g,"").trim();
       const parts=[dist&&dist!=="0 km"&&dist,cals&&`${cals} kcal`,row["Temperature"]&&row["Temperature"]!=="0 C"&&row["Temperature"]].filter(Boolean);
-      toInsert.push({tipo:mod.label,modalidade:mod.id,duracao:dur,fc,notas:parts.join(" · "),data:date,hora,xp:mod.xp,fonte:"apple_watch"});
+      toInsert.push({tipo:mod.label,modalidade:mod.id,duracao:dur,fc,notas:parts.join(" · "),data:date,hora,xp:mod.xp,fonte:"apple_watch",zonas:parseZonas(row)});
     }
     if(toInsert.length===0)return{imported:0,skipped:rows.length};
     const n=await onImport(toInsert);
@@ -463,7 +584,18 @@ function Training({profile,trainings,onAdd,onDelete,onImport}){
           <Card key={i} style={{flex:1,padding:"12px 10px",textAlign:"center"}}><p style={{fontFamily:"'Clash Display',sans-serif",fontSize:22,fontWeight:700,color:s.c,marginBottom:3}}>{s.v}</p><p style={{fontSize:9,color:C.dim,letterSpacing:".1em",textTransform:"uppercase"}}>{s.l}</p></Card>
         ))}
       </div>
-      <div style={{display:"flex",gap:8,marginBottom:16,marginTop:10}}>
+      <div style={{display:"flex",gap:6,marginBottom:14}}>
+        {Array.from({length:7},(_,i)=>{const d=new Date();d.setDate(d.getDate()-6+i);const k=d.toISOString().slice(0,10);const dayTr=trainings.filter(t=>t.data===k);const isToday=k===todayStr();const dw=["D","S","T","Q","Q","S","S"][d.getDay()];return(
+          <div key={k} style={{flex:1,display:"flex",flexDirection:"column",alignItems:"center",gap:4}}>
+            <span style={{fontSize:9,color:isToday?C.yellow:C.dim,fontWeight:isToday?800:400}}>{dw}</span>
+            <div style={{width:"100%",aspectRatio:"1",borderRadius:10,background:dayTr.length>0?"rgba(250,204,21,.1)":"rgba(255,255,255,.04)",border:isToday?`2px solid ${C.yellow}`:"1px solid rgba(255,255,255,.08)",display:"flex",flexWrap:"wrap",alignItems:"center",justifyContent:"center",gap:1,padding:3}}>
+              {dayTr.length===0?<span style={{fontSize:11,color:"rgba(255,255,255,.12)"}}>·</span>:dayTr.slice(0,2).map((t,ti)=>{const mod2=MODALITIES.find(x=>x.id===t.modalidade)||MODALITIES[0];return<span key={ti} style={{fontSize:dayTr.length===1?14:10,lineHeight:1}}>{mod2.emoji}</span>;})}
+            </div>
+            <span style={{fontSize:8,color:dayTr.length>0?C.green:C.dim}}>{dayTr.length>0?`${dayTr.reduce((s,t)=>s+(t.duracao||0),0)}m`:""}</span>
+          </div>
+        );})}
+      </div>
+      <div style={{display:"flex",gap:8,marginBottom:16,marginTop:4}}>
         <Btn onClick={()=>setShow(true)} full>+ Registrar treino</Btn>
         <Btn onClick={()=>{setShowImport(true);setImportResult(null);}} variant="blue" style={{flexShrink:0}}>📥 Import</Btn>
         <Btn onClick={genPlan} variant="ghost" disabled={loadP} style={{flexShrink:0}}>{loadP?"...":"✦ Semana"}</Btn>
@@ -502,26 +634,28 @@ function Training({profile,trainings,onAdd,onDelete,onImport}){
           const m=MODALITIES.find(x=>x.id===t.modalidade)||MODALITIES[0];
           return(
             <Card key={t.id} style={{marginBottom:10}}>
-              <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start",marginBottom:t.analise?10:0}}>
-                <div style={{display:"flex",alignItems:"center",gap:10}}>
-                  <div style={{width:38,height:38,borderRadius:11,background:`${m.color}15`,border:`1px solid ${m.color}30`,display:"flex",alignItems:"center",justifyContent:"center",fontSize:18,flexShrink:0}}>{m.emoji}</div>
-                  <div>
-                    <div style={{display:"flex",alignItems:"center",gap:8,marginBottom:3}}>
+              <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start"}}>
+                <div style={{display:"flex",alignItems:"center",gap:10,flex:1,minWidth:0}}>
+                  <div style={{width:44,height:44,borderRadius:13,background:`${m.color}18`,border:`1px solid ${m.color}35`,display:"flex",alignItems:"center",justifyContent:"center",fontSize:20,flexShrink:0}}>{m.emoji}</div>
+                  <div style={{flex:1,minWidth:0}}>
+                    <div style={{display:"flex",alignItems:"center",gap:6,marginBottom:3,flexWrap:"wrap"}}>
                       <p style={{fontSize:14,fontWeight:700}}>{t.tipo}</p>
                       <Badge color={m.color}>{t.duracao}min</Badge>
-                      {t.fc>0&&<Badge color={C.red}>FC {t.fc}</Badge>}
+                      {t.fc>0&&<Badge color={C.red}>❤️ {t.fc}</Badge>}
                       {t.rir&&<Badge color={C.orange}>RIR {t.rir}</Badge>}
                       {t.fonte==="apple_watch"&&<Badge color={C.blue}>⌚</Badge>}
                     </div>
                     <p style={{fontSize:11,color:C.muted}}>{fmt(t.data)}{t.hora?` · ${t.hora}`:""}</p>
+                    {t.notas&&<p style={{fontSize:11,color:C.dim,marginTop:3,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap",maxWidth:"100%"}}>{t.notas}</p>}
                   </div>
                 </div>
-                <div style={{display:"flex",alignItems:"center",gap:8}}>
+                <div style={{display:"flex",flexDirection:"column",alignItems:"flex-end",gap:8,flexShrink:0,marginLeft:8}}>
                   <Badge color={C.yellow}>+{t.xp||m.xp}XP</Badge>
                   <DelBtn onClick={()=>onDelete(t.id)}/>
                 </div>
               </div>
-              {t.analise&&<p style={{fontSize:11,color:C.muted,lineHeight:1.65,borderTop:`1px solid ${C.border}`,paddingTop:10}}>{t.analise}</p>}
+              {t.zonas&&<ZonasBar zonas={t.zonas}/>}
+              {t.analise&&<p style={{fontSize:11,color:C.muted,lineHeight:1.65,borderTop:`1px solid ${C.border}`,paddingTop:10,marginTop:10}}>{t.analise}</p>}
             </Card>
           );
         })
@@ -1783,7 +1917,7 @@ export default function App(){
         const cals=parseInt((row["Active Calories"]||"0").replace(/\D/g,""))||0;
         const dist=(row["Distance"]||"").replace(/"/g,"").trim();
         const parts=[dist&&dist!=="0 km"&&dist,cals&&`${cals} kcal`].filter(Boolean);
-        toInsert.push({tipo:mod.label,modalidade:mod.id,duracao:dur,fc,notas:parts.join(" · "),data:date,hora,xp:mod.xp,fonte:"apple_watch"});
+        toInsert.push({tipo:mod.label,modalidade:mod.id,duracao:dur,fc,notas:parts.join(" · "),data:date,hora,xp:mod.xp,fonte:"apple_watch",zonas:parseZonas(row)});
       }
       let n=0;
       if(toInsert.length>0)n=await importTrainings(toInsert);
