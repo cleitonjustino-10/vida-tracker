@@ -798,6 +798,7 @@ function Nutrition({profile,meals,onAdd,onDelete,customFoods=[],onAddCustomFood,
   const analisarVariedade=async()=>{setLoadVar(true);try{const d7=new Date();d7.setDate(d7.getDate()-7);const ult7=meals.filter(m=>new Date(m.data+"T12:00:00")>=d7);const nomes=[...new Set(ult7.map(m=>m.nome).filter(Boolean))].slice(0,30).join(", ");const avgCal=Math.round(ult7.reduce((s,m)=>s+(m.calorias||0),0)/Math.max(1,[...new Set(ult7.map(m=>m.data))].length));const avgProt=Math.round(ult7.reduce((s,m)=>s+(m.proteina||0),0)/Math.max(1,[...new Set(ult7.map(m=>m.data))].length));const r=await callAI([{role:"user",content:`Análise nutricional dos últimos 7 dias de Cleiton (${profile?.peso}kg, meta ${profile?.peso_meta}kg, Ultraman):\nAlimentos consumidos: ${nomes||"Sem dados"}\nMédia calórica: ${avgCal} kcal/dia (meta: ${profile?.cal_meta||2800})\nMédia proteína: ${avgProt}g/dia (meta: ${profile?.prot_meta||0}g)\nAvalie: 1) diversidade de grupos alimentares 2) deficiências prováveis 3) 2 alimentos para adicionar na semana seguinte.`}],"Nutricionista esportivo. Português direto. Máximo 5 frases.",400);setVarTip(r);}catch{setVarTip("Erro ao analisar. Tente novamente.");}setLoadVar(false);};
   const [selDate,setSelDate]=useState(todayStr());
   const [mealDate,setMealDate]=useState(todayStr());
+  useEffect(()=>{if(sub==="hoje")setSelDate(todayStr());},[sub]);
   const [mealType,setMealType]=useState("almoco");
   const [loadImg,setLoadImg]=useState(false);
   const [imgRes,setImgRes]=useState(null);
