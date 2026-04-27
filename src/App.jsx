@@ -224,7 +224,9 @@ function Dashboard({profile,meals,weights,checkins,habits,trainings,onTab}){
   const [insight,setInsight]=useState("");
   const [plateauAnalysis,setPlateauAnalysis]=useState("");
   const [loadingPlateau,setLoadingPlateau]=useState(false);
-  const [aguaCopos,setAguaCopos]=useState(()=>{const s=localStorage.getItem("agua_"+todayStr());return s?parseInt(s):0;});
+  const metaAgua=Math.round((profile.peso||80)*35);
+  const [aguaMl,setAguaMl]=useState(()=>{const s=localStorage.getItem("agua_ml_"+todayStr());if(s)return parseInt(s);const cups=localStorage.getItem("agua_"+todayStr());return cups?parseInt(cups)*250:0;});
+  const [aguaInputVal,setAguaInputVal]=useState("");
   const tk=todayStr(),tm=meals.filter(m=>m.data===tk);
   const cal=tm.reduce((s,m)=>s+(m.calorias||0),0),prot=tm.reduce((s,m)=>s+(m.proteina||0),0);
   const ctd=checkins.filter(c=>c.data===tk);
@@ -254,7 +256,9 @@ function Dashboard({profile,meals,weights,checkins,habits,trainings,onTab}){
   const jantarHoje=tm.some(m=>m.tipo==="jantar");
   const protOk=prot>=(profile.prot_meta||0)*0.8;
   const habitosOk=habits.length>0&&ctd.length>=(habits.length*0.7);
-  const aguaOk=aguaCopos>=12;
+  const aguaOk=aguaMl>=metaAgua*0.9;
+  const addAgua=(ml)=>{const n=aguaMl+ml;setAguaMl(n);localStorage.setItem("agua_ml_"+todayStr(),n);};
+  const remAgua=(ml)=>{const n=Math.max(0,aguaMl-ml);setAguaMl(n);localStorage.setItem("agua_ml_"+todayStr(),n);};
   const checkItems=[
     {id:"peso",emoji:"⚖️",label:"Peso do dia",done:pesoHoje,tab:"health",meta:pesoHoje?`${lw}kg`:"Registrar →"},
     {id:"treino",emoji:"🏋️",label:"Treino",done:treinouHoje,tab:"training",meta:treinouHoje?(trainings.find(t=>t.data===tk)?.tipo||"✓"):"Registrar →"},
@@ -263,7 +267,7 @@ function Dashboard({profile,meals,weights,checkins,habits,trainings,onTab}){
     {id:"jantar",emoji:"🌙",label:"Jantar",done:jantarHoje,tab:"nutrition",meta:jantarHoje?`${tm.filter(m=>m.tipo==="jantar").reduce((s,m)=>s+(m.calorias||0),0)}kcal`:"Registrar →"},
     {id:"prot",emoji:"💪",label:"Proteína ≥80%",done:protOk,tab:"nutrition",meta:`${prot}/${profile.prot_meta}g`},
     {id:"habitos",emoji:"🔥",label:"Hábitos ≥70%",done:habitosOk,tab:"habits",meta:`${ctd.length}/${habits.length}`},
-    {id:"agua",emoji:"💧",label:"Hidratação",done:aguaOk,tab:"home",meta:`${aguaCopos}/16`},
+    {id:"agua",emoji:"💧",label:"Hidratação",done:aguaOk,tab:"home",meta:`${(aguaMl/1000).toFixed(1)}/${(metaAgua/1000).toFixed(1)}L`},
   ];
   const doneCt=checkItems.filter(x=>x.done).length;
   const pctDay=Math.round((doneCt/checkItems.length)*100);
@@ -279,8 +283,6 @@ function Dashboard({profile,meals,weights,checkins,habits,trainings,onTab}){
   const recentW=weights.filter(w=>new Date(w.data+"T12:00:00")>=d14);
   const isPlateauActive=recentW.length>=2&&(Math.max(...recentW.map(w=>w.peso))-Math.min(...recentW.map(w=>w.peso)))<0.5;
   const plateauDays=isPlateauActive?Math.round((new Date()-new Date(recentW[recentW.length-1].data+"T12:00:00"))/86400000):0;
-  const addCopo=()=>{const n=Math.min(aguaCopos+1,16);setAguaCopos(n);localStorage.setItem("agua_"+todayStr(),n);};
-  const removeCopo=()=>{const n=Math.max(aguaCopos-1,0);setAguaCopos(n);localStorage.setItem("agua_"+todayStr(),n);};
   const analyzePlateau=async()=>{
     setLoadingPlateau(true);
     const d7=new Date();d7.setDate(d7.getDate()-7);
@@ -453,15 +455,24 @@ function Dashboard({profile,meals,weights,checkins,habits,trainings,onTab}){
       {/* WATER */}
       <div style={{padding:"0 20px"}}>
         <Card>
-          <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:10}}>
-            <div><p style={{fontSize:13,fontWeight:700,marginBottom:2}}>💧 Hidratação</p><p style={{fontSize:11,color:C.muted}}>{aguaCopos}/16 copos · {(aguaCopos*250/1000).toFixed(1)}L de 4L</p></div>
-            <div style={{display:"flex",gap:10,alignItems:"center"}}>
-              <button onClick={removeCopo} style={{width:36,height:36,borderRadius:"50%",border:"none",background:"rgba(255,255,255,0.07)",color:C.muted,fontSize:20,cursor:"pointer",fontFamily:"inherit",display:"flex",alignItems:"center",justifyContent:"center"}}>−</button>
-              <span style={{fontFamily:"'Clash Display',sans-serif",fontSize:24,fontWeight:700,color:C.blue,minWidth:30,textAlign:"center"}}>{aguaCopos}</span>
-              <button onClick={addCopo} style={{width:36,height:36,borderRadius:"50%",border:"none",background:"rgba(96,165,250,0.2)",color:C.blue,fontSize:20,cursor:"pointer",fontFamily:"inherit",display:"flex",alignItems:"center",justifyContent:"center"}}>+</button>
+          <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:6}}>
+            <div>
+              <p style={{fontSize:13,fontWeight:700,marginBottom:2}}>💧 Hidratação</p>
+              <p style={{fontSize:11,color:C.muted}}>{(aguaMl/1000).toFixed(2)}L de {(metaAgua/1000).toFixed(1)}L · Meta: {metaAgua}ml/dia ({profile.peso}kg × 35ml)</p>
             </div>
+            <span style={{fontFamily:"'Clash Display',sans-serif",fontSize:22,fontWeight:700,color:aguaOk?C.green:C.blue}}>{(aguaMl/1000).toFixed(1)}L</span>
           </div>
-          <Bar value={aguaCopos} max={16} color={C.blue} h={6}/>
+          <Bar value={aguaMl} max={metaAgua} color={aguaOk?C.green:C.blue} h={6}/>
+          <div style={{display:"flex",gap:6,marginTop:12,flexWrap:"wrap"}}>
+            {[200,300,500].map(ml=>(
+              <button key={ml} onClick={()=>addAgua(ml)} style={{flex:1,padding:"9px 4px",borderRadius:10,border:"1.5px solid rgba(96,165,250,.25)",background:"rgba(96,165,250,.1)",color:C.blue,fontSize:12,fontWeight:700,cursor:"pointer",fontFamily:"inherit"}}>+{ml}ml</button>
+            ))}
+            <button onClick={()=>remAgua(200)} style={{padding:"9px 12px",borderRadius:10,border:"1.5px solid rgba(255,255,255,.1)",background:"rgba(255,255,255,.06)",color:C.muted,fontSize:12,fontWeight:700,cursor:"pointer",fontFamily:"inherit"}}>−200</button>
+          </div>
+          <div style={{display:"flex",gap:8,marginTop:8}}>
+            <input type="number" value={aguaInputVal} onChange={e=>setAguaInputVal(e.target.value)} placeholder="Outro (ml)" style={{flex:1,background:"rgba(255,255,255,.05)",border:"1.5px solid rgba(255,255,255,.1)",borderRadius:10,padding:"9px 12px",color:"#fff",fontSize:13,outline:"none",fontFamily:"inherit"}}/>
+            <button onClick={()=>{const v=parseInt(aguaInputVal);if(v>0){addAgua(v);setAguaInputVal("");}}} style={{padding:"9px 16px",borderRadius:10,border:"none",background:"rgba(96,165,250,.2)",color:C.blue,fontSize:13,fontWeight:700,cursor:"pointer",fontFamily:"inherit"}}>+ Adicionar</button>
+          </div>
         </Card>
       </div>
     </div>
@@ -480,6 +491,7 @@ function Training({profile,trainings,onAdd,onDelete,onImport}){
   const [plan,setPlan]=useState("");
   const [loadP,setLoadP]=useState(false);
   const [filter,setFilter]=useState("all");
+  const [filterDate,setFilterDate]=useState(null);
   const [date,setDate]=useState(todayStr());
   const [rir,setRir]=useState("");
   const [planoMensal,setPlanoMensal]=useState("");
@@ -574,7 +586,7 @@ function Training({profile,trainings,onAdd,onDelete,onImport}){
     }catch{setPlanoMensal("Erro ao gerar plano. Tente novamente.");}
     setLoadPM(false);
   };
-  const filtered=filter==="all"?trainings:trainings.filter(t=>t.modalidade===filter);
+  const filtered=(filter==="all"?trainings:trainings.filter(t=>t.modalidade===filter)).filter(t=>!filterDate||t.data===filterDate);
   const weekCount=trainings.filter(t=>new Date()-new Date(t.data)<7*86400000).length;
   return(
     <div style={{padding:"22px 18px",paddingBottom:170}}>
@@ -585,10 +597,10 @@ function Training({profile,trainings,onAdd,onDelete,onImport}){
         ))}
       </div>
       <div style={{display:"flex",gap:6,marginBottom:14}}>
-        {Array.from({length:7},(_,i)=>{const d=new Date();d.setDate(d.getDate()-6+i);const k=d.toISOString().slice(0,10);const dayTr=trainings.filter(t=>t.data===k);const isToday=k===todayStr();const dw=["D","S","T","Q","Q","S","S"][d.getDay()];return(
-          <div key={k} style={{flex:1,display:"flex",flexDirection:"column",alignItems:"center",gap:4}}>
-            <span style={{fontSize:9,color:isToday?C.yellow:C.dim,fontWeight:isToday?800:400}}>{dw}</span>
-            <div style={{width:"100%",aspectRatio:"1",borderRadius:10,background:dayTr.length>0?"rgba(250,204,21,.1)":"rgba(255,255,255,.04)",border:isToday?`2px solid ${C.yellow}`:"1px solid rgba(255,255,255,.08)",display:"flex",flexWrap:"wrap",alignItems:"center",justifyContent:"center",gap:1,padding:3}}>
+        {Array.from({length:7},(_,i)=>{const d=new Date();d.setDate(d.getDate()-6+i);const k=d.toISOString().slice(0,10);const dayTr=trainings.filter(t=>t.data===k);const isToday=k===todayStr();const isSel=filterDate===k;const dw=["D","S","T","Q","Q","S","S"][d.getDay()];return(
+          <div key={k} onClick={()=>setFilterDate(isSel?null:k)} style={{flex:1,display:"flex",flexDirection:"column",alignItems:"center",gap:4,cursor:"pointer"}}>
+            <span style={{fontSize:9,color:isSel?C.yellow:isToday?C.yellow:C.dim,fontWeight:isSel||isToday?800:400}}>{dw}</span>
+            <div style={{width:"100%",aspectRatio:"1",borderRadius:10,background:isSel?"rgba(250,204,21,.2)":dayTr.length>0?"rgba(250,204,21,.1)":"rgba(255,255,255,.04)",border:isSel?`2px solid ${C.yellow}`:isToday?`2px solid ${C.yellow}`:"1px solid rgba(255,255,255,.08)",display:"flex",flexWrap:"wrap",alignItems:"center",justifyContent:"center",gap:1,padding:3}}>
               {dayTr.length===0?<span style={{fontSize:11,color:"rgba(255,255,255,.12)"}}>·</span>:dayTr.slice(0,2).map((t,ti)=>{const mod2=MODALITIES.find(x=>x.id===t.modalidade)||MODALITIES[0];return<span key={ti} style={{fontSize:dayTr.length===1?14:10,lineHeight:1}}>{mod2.emoji}</span>;})}
             </div>
             <span style={{fontSize:8,color:dayTr.length>0?C.green:C.dim}}>{dayTr.length>0?`${dayTr.reduce((s,t)=>s+(t.duracao||0),0)}m`:""}</span>
@@ -621,6 +633,10 @@ function Training({profile,trainings,onAdd,onDelete,onImport}){
           )}
         </Card>
       )}
+      <div style={{display:"flex",gap:8,alignItems:"center",marginBottom:10}}>
+        <input type="date" value={filterDate||""} onChange={e=>setFilterDate(e.target.value||null)} style={{flex:1,background:"rgba(255,255,255,.05)",border:"1.5px solid rgba(255,255,255,.1)",borderRadius:10,padding:"9px 12px",color:filterDate?C.yellow:"rgba(255,255,255,.3)",fontSize:12,outline:"none",fontFamily:"inherit"}}/>
+        {filterDate&&<Btn onClick={()=>setFilterDate(null)} sm variant="ghost">✕ Limpar</Btn>}
+      </div>
       <div style={{display:"flex",gap:6,overflowX:"auto",paddingBottom:8,marginBottom:16}}>
         {[{id:"all",label:"Todos",color:C.yellow,emoji:"🏅"},...MODALITIES].map(m=>(
           <button key={m.id} onClick={()=>setFilter(m.id)} style={{padding:"6px 14px",borderRadius:20,border:filter===m.id?`1.5px solid ${m.color}`:"1.5px solid rgba(255,255,255,.1)",background:filter===m.id?`${m.color}15`:"transparent",color:filter===m.id?m.color:C.muted,fontSize:11,fontWeight:filter===m.id?700:400,cursor:"pointer",fontFamily:"inherit",whiteSpace:"nowrap"}}>
@@ -628,7 +644,7 @@ function Training({profile,trainings,onAdd,onDelete,onImport}){
           </button>
         ))}
       </div>
-      <SLbl>Histórico</SLbl>
+      <SLbl>{filterDate?`Treinos — ${fmt(filterDate)}`:"Histórico"}{filterDate&&filtered.length===0?" · nenhum treino neste dia":""}</SLbl>
       {filtered.length===0?<div style={{textAlign:"center",padding:"40px 0",color:C.dim}}><p style={{fontSize:36,marginBottom:10}}>🏋️</p><p style={{fontSize:13}}>Nenhum treino registrado</p></div>:
         filtered.map(t=>{
           const m=MODALITIES.find(x=>x.id===t.modalidade)||MODALITIES[0];
@@ -2019,7 +2035,8 @@ export default function App(){
       const res=await fetch(csvUrl);if(!res.ok){setSyncing(false);return 0;}
       const text=await res.text();
       const rows=parseCSV(text);
-      const curr=trainingsRef.current;
+      const csvDates=[...new Set(rows.map(r=>parseHFDate((r["Date"]||"").trim())).filter(Boolean))];
+      const existing=csvDates.length>0?await DB.get("treinos",`?data=in.(${csvDates.join(",")})&select=data,modalidade,hora,duracao`).catch(()=>[]):[];
       const toInsert=[];
       for(const row of rows){
         const type=(row["Type"]||row[" Type "]||"").trim();
@@ -2027,7 +2044,7 @@ export default function App(){
         const dur=parseHFTime(row["Total Time"]);if(dur<5)continue;
         const date=parseHFDate(row["Date"]);if(!date)continue;
         const hora=(row["Time"]||"").slice(0,5);
-        if(curr.some(t=>t.data===date&&t.modalidade===mod.id&&(t.hora||"").slice(0,5)===hora))continue;
+        if(existing.some(t=>t.data===date&&t.modalidade===mod.id&&(t.hora||"").slice(0,5)===hora))continue;
         const fc=parseInt((row["Avg. Heart Rate"]||"0").replace(/\D/g,""))||0;
         const cals=parseInt((row["Active Calories"]||"0").replace(/\D/g,""))||0;
         const dist=(row["Distance"]||"").replace(/"/g,"").trim();
