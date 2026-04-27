@@ -646,7 +646,7 @@ function Training({profile,trainings,onAdd,onDelete,onImport}){
           </button>
         ))}
       </div>
-      <SLbl>{filterDate?`Treinos — ${fmt(filterDate)}`:"Histórico"}{filterDate&&filtered.length===0?" · nenhum treino neste dia":""}</SLbl>
+      <SLbl>{filterDate?`Treinos — ${fmtFull(filterDate)}`:"Histórico"}{filterDate&&filtered.length===0?" · nenhum treino neste dia":""}</SLbl>
       {filtered.length===0?<div style={{textAlign:"center",padding:"40px 0",color:C.dim}}><p style={{fontSize:36,marginBottom:10}}>🏋️</p><p style={{fontSize:13}}>Nenhum treino registrado</p></div>:
         filtered.map(t=>{
           const m=MODALITIES.find(x=>x.id===t.modalidade)||MODALITIES[0];
@@ -663,7 +663,7 @@ function Training({profile,trainings,onAdd,onDelete,onImport}){
                       {t.rir&&<Badge color={C.orange}>RIR {t.rir}</Badge>}
                       {t.fonte==="apple_watch"&&<Badge color={C.blue}>⌚</Badge>}
                     </div>
-                    <p style={{fontSize:11,color:C.muted}}>{fmt(t.data)}{t.hora?` · ${t.hora}`:""}</p>
+                    <p style={{fontSize:11,color:C.muted}}>{fmtFull(t.data)}{t.hora?` · ${t.hora}`:""}</p>
                     {t.notas&&<p style={{fontSize:11,color:C.dim,marginTop:3,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap",maxWidth:"100%"}}>{t.notas}</p>}
                   </div>
                 </div>
@@ -1991,7 +1991,7 @@ export default function App(){
       const [p,m,t,h,c,w,comp,sd,cf,cs]=await Promise.all([
         DB.get("perfil","?order=created_at.desc&limit=1"),
         DB.get("refeicoes","?order=created_at.desc&limit=300"),
-        DB.get("treinos","?order=created_at.desc&limit=100"),
+        DB.get("treinos","?order=data.desc,hora.desc&limit=200"),
         DB.get("habitos","?order=created_at.asc"),
         DB.get("checkins_habitos","?order=created_at.desc&limit=500"),
         DB.get("pesos","?order=created_at.desc&limit=90"),
