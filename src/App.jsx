@@ -21,7 +21,7 @@ const getTacoUnidades=(nome)=>{const n=nome.toLowerCase();for(const[k,v]of Objec
 const ZONE_COLORS=["#334155","#64748b","#60a5fa","#34d399","#fbbf24","#f87171"];
 const ZONE_LABELS=["Repouso","Z1 Leve","Z2 Fat","Z3 Aeróbico","Z4 Limiar","Z5 Máximo"];
 const parseZonas=(row)=>{const z={};["HRZ0","HRZ1","HRZ2","HRZ3","HRZ4","HRZ5"].forEach((k,i)=>{const v=parseHFTime(row[k]||"");if(v>0)z[`z${i}`]=v;});return Object.keys(z).length>0?z:null;};
-const calcStreak=(trainings,meals,checkins)=>{let n=0;const now=new Date();for(let i=0;i<=365;i++){const d=new Date(now);d.setDate(d.getDate()-i);const k=d.toISOString().slice(0,10);const ok=trainings.some(t=>t.data===k)||meals.some(m=>m.data===k)||checkins.some(c=>c.data===k);if(!ok)break;n++;}return n;};
+const calcStreak=(trainings,meals,checkins)=>{let n=0;const now=new Date();for(let i=0;i<=365;i++){const d=new Date(now);d.setDate(d.getDate()-i);const k=localDate(d);const ok=trainings.some(t=>t.data===k)||meals.some(m=>m.data===k)||checkins.some(c=>c.data===k);if(!ok)break;n++;}return n;};
 const parseHealthRows=(rows,existing=[])=>rows.reduce((acc,row)=>{
   const date=parseHFDate((row["Date"]||"").trim());if(!date)return acc;
   if(existing.some(e=>e.data===date))return acc;
@@ -43,7 +43,8 @@ async function callVision(b64,mime,prompt,max=2500){
   return parseJSON(gParts(d));
 }
 
-const todayStr=()=>new Date().toISOString().slice(0,10);
+const todayStr=()=>{const d=new Date();return`${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;};
+const localDate=(d)=>`${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;
 const fmt=(d)=>new Date(d+"T12:00:00").toLocaleDateString("pt-BR",{day:"2-digit",month:"2-digit"});
 const fmtFull=(d)=>new Date(d+"T12:00:00").toLocaleDateString("pt-BR",{day:"2-digit",month:"long",year:"numeric"});
 const fmtNow=()=>new Date().toLocaleTimeString("pt-BR",{hour:"2-digit",minute:"2-digit"});
@@ -233,7 +234,7 @@ function Dashboard({profile,meals,weights,checkins,habits,trainings,onTab}){
   const lvl=getLvl(profile.xp||0),xpB=XPL[lvl]||0,xpN=XPL[lvl+1]||20000;
   const lw=weights[0]?.peso||profile.peso,lost=Math.max(0,(profile.peso||0)-(lw||0));
   const days=Math.max(1,Math.floor((new Date()-new Date(profile.data_criacao||tk))/86400000)+1);
-  const week=Array.from({length:7},(_,i)=>{const d=new Date();d.setDate(d.getDate()-6+i);const k=d.toISOString().slice(0,10);return{k,dw:["D","S","T","Q","Q","S","S"][d.getDay()],cal:meals.filter(m=>m.data===k).reduce((s,m)=>s+(m.calorias||0),0),tr:trainings.some(t=>t.data===k),today:k===tk};});
+  const week=Array.from({length:7},(_,i)=>{const d=new Date();d.setDate(d.getDate()-6+i);const k=localDate(d);return{k,dw:["D","S","T","Q","Q","S","S"][d.getDay()],cal:meals.filter(m=>m.data===k).reduce((s,m)=>s+(m.calorias||0),0),tr:trainings.some(t=>t.data===k),today:k===tk};});
   const treinouHoje=trainings.some(t=>t.data===tk);
   const calCiclo=treinouHoje?Math.round((profile.cal_meta||2800)*1.1):Math.round((profile.cal_meta||2800)*0.9);
   const calDiff=Math.abs(calCiclo-(profile.cal_meta||2800));
@@ -470,8 +471,9 @@ function Dashboard({profile,meals,weights,checkins,habits,trainings,onTab}){
             <button onClick={()=>remAgua(200)} style={{padding:"9px 12px",borderRadius:10,border:"1.5px solid rgba(255,255,255,.1)",background:"rgba(255,255,255,.06)",color:C.muted,fontSize:12,fontWeight:700,cursor:"pointer",fontFamily:"inherit"}}>−200</button>
           </div>
           <div style={{display:"flex",gap:8,marginTop:8}}>
-            <input type="number" value={aguaInputVal} onChange={e=>setAguaInputVal(e.target.value)} placeholder="Outro (ml)" style={{flex:1,background:"rgba(255,255,255,.05)",border:"1.5px solid rgba(255,255,255,.1)",borderRadius:10,padding:"9px 12px",color:"#fff",fontSize:13,outline:"none",fontFamily:"inherit"}}/>
-            <button onClick={()=>{const v=parseInt(aguaInputVal);if(v>0){addAgua(v);setAguaInputVal("");}}} style={{padding:"9px 16px",borderRadius:10,border:"none",background:"rgba(96,165,250,.2)",color:C.blue,fontSize:13,fontWeight:700,cursor:"pointer",fontFamily:"inherit"}}>+ Adicionar</button>
+            <input type="number" value={aguaInputVal} onChange={e=>setAguaInputVal(e.target.value)} placeholder="Quantidade (ml)" style={{flex:1,background:"rgba(255,255,255,.05)",border:"1.5px solid rgba(255,255,255,.1)",borderRadius:10,padding:"9px 12px",color:"#fff",fontSize:13,outline:"none",fontFamily:"inherit"}}/>
+            <button onClick={()=>{const v=parseInt(aguaInputVal);if(v>0){remAgua(v);setAguaInputVal("");}}} style={{padding:"9px 12px",borderRadius:10,border:"1.5px solid rgba(255,255,255,.12)",background:"rgba(255,255,255,.07)",color:C.muted,fontSize:13,fontWeight:700,cursor:"pointer",fontFamily:"inherit"}}>−</button>
+            <button onClick={()=>{const v=parseInt(aguaInputVal);if(v>0){addAgua(v);setAguaInputVal("");}}} style={{padding:"9px 12px",borderRadius:10,border:"none",background:"rgba(96,165,250,.2)",color:C.blue,fontSize:13,fontWeight:700,cursor:"pointer",fontFamily:"inherit"}}>+</button>
           </div>
         </Card>
       </div>
@@ -597,7 +599,7 @@ function Training({profile,trainings,onAdd,onDelete,onImport}){
         ))}
       </div>
       <div style={{display:"flex",gap:6,marginBottom:14}}>
-        {Array.from({length:7},(_,i)=>{const d=new Date();d.setDate(d.getDate()-6+i);const k=d.toISOString().slice(0,10);const dayTr=trainings.filter(t=>t.data===k);const isToday=k===todayStr();const isSel=filterDate===k;const dw=["D","S","T","Q","Q","S","S"][d.getDay()];return(
+        {Array.from({length:7},(_,i)=>{const d=new Date();d.setDate(d.getDate()-6+i);const k=localDate(d);const dayTr=trainings.filter(t=>t.data===k);const isToday=k===todayStr();const isSel=filterDate===k;const dw=["D","S","T","Q","Q","S","S"][d.getDay()];return(
           <div key={k} onClick={()=>setFilterDate(isSel?null:k)} style={{flex:1,display:"flex",flexDirection:"column",alignItems:"center",gap:4,cursor:"pointer"}}>
             <span style={{fontSize:9,color:isSel?C.yellow:isToday?C.yellow:C.dim,fontWeight:isSel||isToday?800:400}}>{dw}</span>
             <div style={{width:"100%",aspectRatio:"1",borderRadius:10,background:isSel?"rgba(250,204,21,.2)":dayTr.length>0?"rgba(250,204,21,.1)":"rgba(255,255,255,.04)",border:isSel?`2px solid ${C.yellow}`:isToday?`2px solid ${C.yellow}`:"1px solid rgba(255,255,255,.08)",display:"flex",flexWrap:"wrap",alignItems:"center",justifyContent:"center",gap:1,padding:3}}>
@@ -777,7 +779,7 @@ function Nutrition({profile,meals,onAdd,onDelete,customFoods=[],onAddCustomFood,
 
   const calDays=Array.from({length:35},(_,i)=>{
     const d=new Date();d.setDate(d.getDate()-34+i);
-    const k=d.toISOString().slice(0,10);
+    const k=localDate(d);
     const c=meals.filter(m=>m.data===k).reduce((s,m)=>s+(m.calorias||0),0);
     return{k,day:d.getDate(),cal:c,today:k===tk,sel:k===selDate};
   });
@@ -1665,7 +1667,7 @@ function Habits({habits,checkins,onToggle,onAdd,onRemove}){
   const tk=todayStr();
   const todayCI=checkins.filter(c=>c.data===tk).map(c=>c.habito_id);
   const EMOJIS=["🌅","💧","🏃","📚","🧘","✍️","🥗","🌙","🎯","💰","🤝","🔥","⏱️","🎓","💊","🏋️","🍎","🏊","🎾","🚴"];
-  const week=Array.from({length:7},(_,i)=>{const d=new Date();d.setDate(d.getDate()-6+i);const k=d.toISOString().slice(0,10);return{k,day:d.getDate(),dw:["D","S","T","Q","Q","S","S"][d.getDay()],done:checkins.filter(c=>c.data===k).length,today:k===tk};});
+  const week=Array.from({length:7},(_,i)=>{const d=new Date();d.setDate(d.getDate()-6+i);const k=localDate(d);return{k,day:d.getDate(),dw:["D","S","T","Q","Q","S","S"][d.getDay()],done:checkins.filter(c=>c.data===k).length,today:k===tk};});
   return(
     <div style={{padding:"22px 18px",paddingBottom:170}}>
       <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start",marginBottom:20}}>
