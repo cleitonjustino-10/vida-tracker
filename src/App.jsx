@@ -225,6 +225,8 @@ function Dashboard({profile,meals,weights,checkins,habits,trainings,onTab,saudeD
   const [insight,setInsight]=useState("");
   const [plateauAnalysis,setPlateauAnalysis]=useState("");
   const [loadingPlateau,setLoadingPlateau]=useState(false);
+  const [cheatTip,setCheatTip]=useState("");const [loadCheat,setLoadCheat]=useState(false);
+  const modoManu=localStorage.getItem("modo_manutencao")==="true";
   const metaAgua=Math.round((profile.peso||80)*35);
   const [aguaMl,setAguaMl]=useState(()=>{const s=localStorage.getItem("agua_ml_"+todayStr());if(s)return parseInt(s);const cups=localStorage.getItem("agua_"+todayStr());return cups?parseInt(cups)*250:0;});
   const [aguaInputVal,setAguaInputVal]=useState("");
@@ -236,8 +238,11 @@ function Dashboard({profile,meals,weights,checkins,habits,trainings,onTab,saudeD
   const days=Math.max(1,Math.floor((new Date()-new Date(profile.data_criacao||tk))/86400000)+1);
   const week=Array.from({length:7},(_,i)=>{const d=new Date();d.setDate(d.getDate()-6+i);const k=localDate(d);return{k,dw:["D","S","T","Q","Q","S","S"][d.getDay()],cal:meals.filter(m=>m.data===k).reduce((s,m)=>s+(m.calorias||0),0),tr:trainings.some(t=>t.data===k),today:k===tk};});
   const treinouHoje=trainings.some(t=>t.data===tk);
-  const calCiclo=treinouHoje?Math.round((profile.cal_meta||2800)*1.1):Math.round((profile.cal_meta||2800)*0.9);
-  const calDiff=Math.abs(calCiclo-(profile.cal_meta||2800));
+  const calBase=modoManu?(profile.tdee||profile.cal_meta||2800):(profile.cal_meta||2800);
+  const calCiclo=modoManu?calBase:(treinouHoje?Math.round(calBase*1.1):Math.round(calBase*0.9));
+  const calDiff=Math.abs(calCiclo-calBase);
+  const isCheatDay=cal>calCiclo*1.2&&cal>500;
+  const analisarCheat=async()=>{setLoadCheat(true);try{const r=await callAI([{role:"user",content:`Cleiton consumiu ${cal}kcal hoje (meta: ${calCiclo}kcal). Excesso de ${cal-calCiclo}kcal. Peso atual ${weights[0]?.peso||profile.peso}kg, meta ${profile.peso_meta}kg. Dê 3 ações práticas para recuperação amanhã (treino, alimentação, hidratação). Máximo 3 frases curtas, diretas.`}],"Coach Paulo Musy. Seja direto e motivador. Português.",300);setCheatTip(r);}catch{setCheatTip("Amanhã é um novo dia. Volte ao plano!");}setLoadCheat(false);};
   const pausaAtiva=localStorage.getItem("pausa_ativa")==="true";
   const pausaMotivo=localStorage.getItem("pausa_motivo");
   const pausaInicio=localStorage.getItem("pausa_inicio");
@@ -402,6 +407,16 @@ function Dashboard({profile,meals,weights,checkins,habits,trainings,onTab,saudeD
         </div>
       </div>
 
+      {modoManu&&<div style={{padding:"0 20px",marginBottom:14}}><div style={{background:"rgba(96,165,250,.08)",border:"1px solid rgba(96,165,250,.2)",borderRadius:14,padding:"10px 14px",display:"flex",justifyContent:"space-between",alignItems:"center"}}><div><p style={{fontSize:11,fontWeight:700,color:C.blue}}>⚖️ Modo Manutenção ativo</p><p style={{fontSize:10,color:C.muted}}>Meta: {calBase} kcal/dia (TDEE)</p></div><button onClick={()=>{localStorage.removeItem("modo_manutencao");window.location.reload();}} style={{background:"rgba(255,255,255,.07)",border:"none",borderRadius:8,padding:"5px 10px",color:C.muted,fontSize:10,cursor:"pointer",fontFamily:"inherit"}}>Desativar</button></div></div>}
+      {isCheatDay&&(
+        <div style={{padding:"0 20px",marginBottom:14}}>
+          <Card style={{background:"rgba(248,113,113,.08)",border:"1px solid rgba(248,113,113,.25)"}}>
+            <div style={{display:"flex",alignItems:"center",gap:10,marginBottom:8}}><span style={{fontSize:20}}>🍕</span><div><p style={{fontSize:13,fontWeight:700,color:C.red}}>Dia pesado — +{cal-calCiclo} kcal</p><p style={{fontSize:11,color:C.muted}}>{cal} kcal consumidas · meta {calCiclo} kcal</p></div></div>
+            {cheatTip&&<p style={{fontSize:12,color:"rgba(255,255,255,.7)",lineHeight:1.7,marginBottom:12,whiteSpace:"pre-line"}}>{cheatTip}</p>}
+            <Btn onClick={analisarCheat} disabled={loadCheat} variant="danger" full>{loadCheat?"Analisando...":"⚡ Coach: como me recuperar?"}</Btn>
+          </Card>
+        </div>
+      )}
       {showProtAlert&&(
         <div style={{padding:"0 20px",marginBottom:14}}>
           <div style={{background:"rgba(251,191,36,0.08)",border:"1px solid rgba(251,191,36,0.2)",borderRadius:16,padding:16}}>
@@ -1929,6 +1944,16 @@ function Settings({profile,onUpdateProfile,onSyncNow,syncing,onSyncHealthNow,syn
       {sub==="dados"&&(
         <>
           <Card style={{marginBottom:14}}>
+            <p style={{fontSize:14,fontWeight:700,marginBottom:6}}>⚖️ Modo Manutenção</p>
+            <p style={{fontSize:12,color:C.muted,lineHeight:1.6,marginBottom:14}}>Atingiu uma meta? Mude para manutenção: calorias = TDEE ({profile?.tdee||"—"} kcal) sem déficit, ideal para períodos de pico de treino.</p>
+            {(()=>{const on=localStorage.getItem("modo_manutencao")==="true";return on?(<div><div style={{background:"rgba(96,165,250,.1)",border:"1px solid rgba(96,165,250,.25)",borderRadius:12,padding:"10px 14px",marginBottom:12}}><p style={{fontSize:12,fontWeight:700,color:C.blue}}>✓ Ativo — meta diária: {profile?.tdee||"—"} kcal</p></div><Btn onClick={()=>{localStorage.removeItem("modo_manutencao");window.location.reload();}} variant="ghost" full>Desativar manutenção</Btn></div>):(<Btn onClick={()=>{localStorage.setItem("modo_manutencao","true");window.location.reload();}} variant="blue" full>Ativar modo manutenção</Btn>);})()}
+          </Card>
+          <Card style={{marginBottom:14}}>
+            <p style={{fontSize:14,fontWeight:700,marginBottom:6}}>🔔 Lembretes</p>
+            <p style={{fontSize:12,color:C.muted,lineHeight:1.6,marginBottom:14}}>Receba notificações do browser para lembrar de registrar treinos e refeições.</p>
+            {(()=>{const perm="Notification" in window?Notification.permission:"unsupported";return perm==="unsupported"?<p style={{fontSize:12,color:C.dim}}>Notificações não suportadas neste browser.</p>:perm==="granted"?<div><div style={{background:"rgba(74,222,128,.1)",border:"1px solid rgba(74,222,128,.25)",borderRadius:12,padding:"10px 14px",marginBottom:12}}><p style={{fontSize:12,fontWeight:700,color:C.green}}>✓ Notificações ativas</p></div><Btn onClick={()=>{new Notification("Vida Tracker 🏆",{body:"Lembrete de teste — tudo ok!",icon:"/icon-192.png"});}} variant="ghost" full>Testar notificação</Btn></div>:<Btn onClick={async()=>{const r=await Notification.requestPermission();if(r==="granted")new Notification("Vida Tracker 🏆",{body:"Lembretes ativados! Você vai longe.",icon:"/icon-192.png"});window.location.reload();}} variant="green" full>Ativar lembretes</Btn>;})()}
+          </Card>
+          <Card style={{marginBottom:14}}>
             <p style={{fontSize:14,fontWeight:700,marginBottom:6}}>📦 Backup dos dados</p>
             <p style={{fontSize:12,color:C.muted,lineHeight:1.6,marginBottom:14}}>Exporta todos os dados em JSON.</p>
             <Btn onClick={async()=>{const [p,m,t,w]=await Promise.all([DB.get("perfil"),DB.get("refeicoes"),DB.get("treinos"),DB.get("pesos")]);const blob=new Blob([JSON.stringify({perfil:p,refeicoes:m,treinos:t,pesos:w},null,2)],{type:"application/json"});const url=URL.createObjectURL(blob);const a=document.createElement("a");a.href=url;a.download=`vida-tracker-backup.json`;a.click();}} variant="green" full>⬇ Baixar backup JSON</Btn>
@@ -2089,6 +2114,9 @@ export default function App(){
   const [tab,setTab]=useState("home");
   const [showCheckin,setShowCheckin]=useState(false);
   const [showMais,setShowMais]=useState(false);
+  const [deferredInstall,setDeferredInstall]=useState(null);
+  const [showInstallBanner,setShowInstallBanner]=useState(!localStorage.getItem("install_dismissed"));
+  useEffect(()=>{const h=e=>{e.preventDefault();setDeferredInstall(e);};window.addEventListener("beforeinstallprompt",h);return()=>window.removeEventListener("beforeinstallprompt",h);},[]);
   const [showQuick,setShowQuick]=useState(false);
   const [syncing,setSyncing]=useState(false);
   const [syncingHealth,setSyncingHealth]=useState(false);
@@ -2292,6 +2320,19 @@ export default function App(){
         )}
         <button onClick={()=>setShowQuick(q=>!q)} style={{width:52,height:52,borderRadius:"50%",background:C.yellow,border:"none",fontSize:26,cursor:"pointer",color:"#000",fontWeight:900,boxShadow:"0 4px 20px rgba(250,204,21,.45)",display:"flex",alignItems:"center",justifyContent:"center",transition:"transform .2s",transform:showQuick?"rotate(45deg)":"none"}}>+</button>
       </div>
+      {showInstallBanner&&!localStorage.getItem("install_dismissed")&&(
+        <div style={{position:"fixed",bottom:80,left:"50%",transform:"translateX(-50%)",width:"calc(100% - 32px)",maxWidth:488,background:"rgba(30,41,59,.98)",border:"1px solid rgba(250,204,21,.25)",borderRadius:16,padding:"12px 16px",zIndex:200,display:"flex",alignItems:"center",gap:12,boxShadow:"0 8px 32px rgba(0,0,0,.5)"}}>
+          <span style={{fontSize:24,flexShrink:0}}>📱</span>
+          <div style={{flex:1}}>
+            <p style={{fontSize:12,fontWeight:700,marginBottom:2}}>Adicione à tela inicial</p>
+            <p style={{fontSize:10,color:C.muted}}>Use o Vida Tracker como app nativo — sem abrir o browser</p>
+          </div>
+          <div style={{display:"flex",flexDirection:"column",gap:5,flexShrink:0}}>
+            {deferredInstall&&<button onClick={async()=>{deferredInstall.prompt();const{outcome}=await deferredInstall.userChoice;localStorage.setItem("install_dismissed","1");setShowInstallBanner(false);}} style={{background:C.yellow,border:"none",borderRadius:8,padding:"6px 10px",fontSize:11,fontWeight:700,cursor:"pointer",color:"#000"}}>Instalar</button>}
+            <button onClick={()=>{localStorage.setItem("install_dismissed","1");setShowInstallBanner(false);}} style={{background:"transparent",border:"none",color:C.dim,fontSize:11,cursor:"pointer",padding:"4px"}}>✕ Agora não</button>
+          </div>
+        </div>
+      )}
       <div style={{position:"fixed",bottom:0,left:"50%",transform:"translateX(-50%)",width:"100%",maxWidth:520,background:"rgba(15,23,42,.97)",backdropFilter:"blur(24px)",borderTop:"1px solid rgba(255,255,255,0.05)",zIndex:100}}>
         <div style={{display:"flex",padding:`8px 2px max(20px,env(safe-area-inset-bottom,20px))`}}>
           {TABS.map(t=>{
