@@ -732,7 +732,7 @@ function Training({profile,trainings,onAdd,onDelete,onImport}){
 }
 
 // NUTRITION — 4 subtabs: Hoje / Calendário / TACO / Foto IA
-function Nutrition({profile,meals,onAdd,onDelete}){
+function Nutrition({profile,meals,onAdd,onDelete,customFoods=[],onAddCustomFood,onDeleteCustomFood}){
   const [sub,setSub]=useState("hoje");
   const [selDate,setSelDate]=useState(todayStr());
   const [mealDate,setMealDate]=useState(todayStr());
@@ -747,6 +747,9 @@ function Nutrition({profile,meals,onAdd,onDelete}){
   const [tacoQtd,setTacoQtd]=useState("100");
   const [loadTaco,setLoadTaco]=useState(false);
   const [tacoCart,setTacoCart]=useState([]);
+  const [showAddCustom,setShowAddCustom]=useState(false);
+  const [customForm,setCustomForm]=useState({nome:"",calorias:"",proteina:"",carbs:"",gordura:"",porcao_padrao:"100"});
+  const [loadingAI,setLoadingAI]=useState(false);
 
   const tk=todayStr();
   const dayMeals=meals.filter(m=>m.data===selDate);
@@ -778,9 +781,33 @@ function Nutrition({profile,meals,onAdd,onDelete}){
   const searchTaco=async()=>{
     if(!tacoQ.trim())return;
     setLoadTaco(true);
-    try{const r=await DB.get("alimentos_taco",`?nome=ilike.*${tacoQ.toLowerCase().trim()}*&limit=8`);setTacoR(r||[]);}
+    try{
+      const q=tacoQ.toLowerCase().trim();
+      const taco=await DB.get("alimentos_taco",`?nome=ilike.*${q}*&limit=10`);
+      const local=customFoods.filter(f=>f.nome.toLowerCase().includes(q)).map(f=>({...f,_custom:true}));
+      const seen=new Set();
+      const deduped=[...local,...(taco||[])].filter(f=>{const k=f.nome.toLowerCase().trim();if(seen.has(k))return false;seen.add(k);return true;}).slice(0,10);
+      setTacoR(deduped);
+    }
     catch{setTacoR([]);}
     setLoadTaco(false);
+  };
+  const buscarInfoAI=async()=>{
+    if(!customForm.nome.trim())return;
+    setLoadingAI(true);
+    try{
+      const r=await callAI([{role:"user",content:`Composição nutricional de "${customForm.nome}" por 100g ou porção padrão. JSON: {"calorias":número,"proteina":número,"carbs":número,"gordura":número,"porcao_padrao":número}`}],"Nutricionista especializado em alimentos brasileiros. Retorne APENAS JSON válido.",200);
+      const d=parseJSON(r);
+      if(d)setCustomForm(f=>({...f,...Object.fromEntries(Object.entries(d).map(([k,v])=>[k,String(v)]))}));
+    }catch{}
+    setLoadingAI(false);
+  };
+  const saveCustomFood=async()=>{
+    if(!customForm.nome.trim())return;
+    const food={nome:customForm.nome,categoria:"Custom",calorias:parseFloat(customForm.calorias)||0,proteina:parseFloat(customForm.proteina)||0,carbs:parseFloat(customForm.carbs)||0,gordura:parseFloat(customForm.gordura)||0,porcao_padrao:parseFloat(customForm.porcao_padrao)||100};
+    await onAddCustomFood(food);
+    setCustomForm({nome:"",calorias:"",proteina:"",carbs:"",gordura:"",porcao_padrao:"100"});
+    setShowAddCustom(false);
   };
 
   const tacoMacros=(food,qtd)=>{
@@ -930,7 +957,7 @@ function Nutrition({profile,meals,onAdd,onDelete}){
             return(
               <Card key={food.id} onClick={()=>{setTacoSel(isOpen?null:food);setTacoQtd("100");}} style={{marginBottom:8,cursor:"pointer",border:isOpen?`1.5px solid ${C.yellow}`:`1px solid ${C.border}`,background:isOpen?"rgba(250,204,21,.06)":C.card}}>
                 <div style={{display:"flex",justifyContent:"space-between",alignItems:"center"}}>
-                  <div><p style={{fontSize:13,fontWeight:700,marginBottom:3}}>{food.nome}</p><p style={{fontSize:11,color:C.muted}}>{food.categoria} · por {food.porcao_padrao||100}g</p></div>
+                  <div><div style={{display:"flex",alignItems:"center",gap:6,marginBottom:3}}><p style={{fontSize:13,fontWeight:700}}>{food.nome}</p>{food._custom&&<Badge color={C.purple} style={{fontSize:7}}>Custom</Badge>}</div><p style={{fontSize:11,color:C.muted}}>{food.categoria} · por {food.porcao_padrao||100}g</p></div>
                   <div style={{textAlign:"right"}}><p style={{fontFamily:"'Clash Display',sans-serif",fontSize:16,fontWeight:700,color:C.yellow}}>{food.calorias}</p><p style={{fontSize:9,color:C.dim}}>kcal</p></div>
                 </div>
                 {isOpen&&(
@@ -957,11 +984,42 @@ function Nutrition({profile,meals,onAdd,onDelete}){
                       <Btn onClick={e=>addToCart(food,e)} variant="ghost" style={{flex:1}}>+ Grupo</Btn>
                       <Btn onClick={e=>addTacoDirect(food,e)} style={{flex:1}}>Adicionar direto</Btn>
                     </div>
+                    {food._custom&&<Btn onClick={e=>{e.stopPropagation();onDeleteCustomFood(food.id);setTacoSel(null);setTacoR(r=>r.filter(x=>x.id!==food.id));}} variant="danger" full style={{marginTop:8}}>🗑 Excluir alimento custom</Btn>}
                   </div>
                 )}
               </Card>
             );
           })}
+
+          <div style={{marginTop:20}}>
+            <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:12}}>
+              <SLbl mt={0}>Meus alimentos ({customFoods.length})</SLbl>
+              <Btn onClick={()=>setShowAddCustom(true)} sm variant="purple">+ Adicionar</Btn>
+            </div>
+            {customFoods.length===0&&<p style={{fontSize:12,color:C.dim,textAlign:"center",padding:"12px 0"}}>Nenhum alimento customizado ainda. Adicione acarajé, vatapá, ou qualquer alimento que não está no TACO.</p>}
+            {customFoods.map(food=>(
+              <Card key={food.id} style={{marginBottom:8,display:"flex",justifyContent:"space-between",alignItems:"center"}}>
+                <div><div style={{display:"flex",alignItems:"center",gap:6,marginBottom:2}}><p style={{fontSize:13,fontWeight:700}}>{food.nome}</p><Badge color={C.purple} style={{fontSize:7}}>Custom</Badge></div><p style={{fontSize:11,color:C.muted}}>{food.calorias}kcal · {food.proteina}g prot · por {food.porcao_padrao}g</p></div>
+                <DelBtn onClick={()=>onDeleteCustomFood(food.id)}/>
+              </Card>
+            ))}
+          </div>
+
+          {showAddCustom&&(
+            <Sheet title="➕ Novo alimento" subtitle="Digite o nome e use a IA para preencher automaticamente" onClose={()=>setShowAddCustom(false)}>
+              <FIn label="Nome do alimento" value={customForm.nome} onChange={v=>setCustomForm(f=>({...f,nome:v}))} placeholder="Ex: Acarajé, Vatapá, Tapioca recheada..." req/>
+              <Btn onClick={buscarInfoAI} full variant="blue" disabled={!customForm.nome.trim()||loadingAI} style={{marginBottom:16}}>{loadingAI?"🤖 Buscando referências...":"🤖 Buscar valores com IA"}</Btn>
+              {loadingAI&&<Spin text="IA buscando referências nutricionais"/>}
+              <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:10}}>
+                <FIn label="Calorias (kcal)" type="number" value={customForm.calorias} onChange={v=>setCustomForm(f=>({...f,calorias:v}))} placeholder="0"/>
+                <FIn label="Porção padrão (g)" type="number" value={customForm.porcao_padrao} onChange={v=>setCustomForm(f=>({...f,porcao_padrao:v}))} placeholder="100"/>
+                <FIn label="Proteína (g)" type="number" value={customForm.proteina} onChange={v=>setCustomForm(f=>({...f,proteina:v}))} placeholder="0"/>
+                <FIn label="Carbs (g)" type="number" value={customForm.carbs} onChange={v=>setCustomForm(f=>({...f,carbs:v}))} placeholder="0"/>
+                <FIn label="Gordura (g)" type="number" value={customForm.gordura} onChange={v=>setCustomForm(f=>({...f,gordura:v}))} placeholder="0"/>
+              </div>
+              <Btn onClick={saveCustomFood} full disabled={!customForm.nome.trim()}>Salvar alimento</Btn>
+            </Sheet>
+          )}
         </>
       )}
 
@@ -1793,10 +1851,11 @@ function Settings({profile,onUpdateProfile,onSyncNow,syncing,onSyncHealthNow,syn
   );
 }
 
-function CheckinSemanal({profile,weights,meals,onClose}){
+function CheckinSemanal({profile,weights,meals,onClose,onSave,checkinHistory=[]}){
   const [respostas,setRespostas]=useState({});
   const [analise,setAnalise]=useState("");
   const [loading,setLoading]=useState(false);
+  const [verHistorico,setVerHistorico]=useState(false);
   const lw=weights[0]?.peso||profile?.peso;
   const d7=new Date();d7.setDate(d7.getDate()-7);
   const avgProt=Math.round(meals.filter(m=>new Date(m.data+"T12:00:00")>=d7).reduce((s,m)=>s+(m.proteina||0),0)/7);
@@ -1814,7 +1873,15 @@ function CheckinSemanal({profile,weights,meals,onClose}){
     catch{setAnalise("Erro. Tente novamente.");}
     setLoading(false);
   };
-  const fechar=()=>{localStorage.setItem("lastCheckin",todayStr());onClose();};
+  const fechar=async()=>{
+    if(Object.keys(respostas).length>0&&onSave){
+      try{await onSave({data:todayStr(),...respostas,analise});}catch(e){console.error(e);}
+    }
+    localStorage.setItem("lastCheckin",todayStr());
+    onClose();
+  };
+  const scoreOpt=(pid,opt)=>{const opts=perguntas.find(p=>p.id===pid)?.opts||[];const i=opts.indexOf(opt);return i>=0?i+1:0;};
+  const scoreCheckin=(c)=>["p1","p2","p3","p4"].reduce((s,k)=>s+scoreOpt(k,c[k]),0);
   return(
     <Sheet title="📋 Check-in Semanal" subtitle="Leva 2 minutos. Faz toda diferença." onClose={fechar}>
       {perguntas.map(p=>(
@@ -1830,6 +1897,41 @@ function CheckinSemanal({profile,weights,meals,onClose}){
       <Btn onClick={gerar} full disabled={!allAnswered||loading} style={{marginBottom:analise?12:0}}>{loading?"Analisando...":"Gerar análise da semana"}</Btn>
       {analise&&<p style={{fontSize:13,color:"rgba(255,255,255,0.7)",lineHeight:1.7,marginTop:12,whiteSpace:"pre-line"}}>{analise}</p>}
       <Btn onClick={fechar} full variant="ghost" style={{marginTop:16}}>Fechar e salvar</Btn>
+
+      {checkinHistory.length>0&&(
+        <div style={{marginTop:24}}>
+          <button onClick={()=>setVerHistorico(v=>!v)} style={{background:"transparent",border:`1px solid ${C.border}`,borderRadius:12,padding:"10px 14px",color:C.muted,fontSize:12,fontWeight:700,cursor:"pointer",fontFamily:"inherit",width:"100%",textAlign:"left"}}>
+            {verHistorico?"▲":"▼"} Histórico — {checkinHistory.length} semanas registradas
+          </button>
+          {verHistorico&&(
+            <div style={{marginTop:12,display:"flex",flexDirection:"column",gap:10}}>
+              {checkinHistory.slice(0,8).map((c,i)=>{
+                const score=scoreCheckin(c);
+                const pct=score/16;
+                const col=pct>=.75?C.green:pct>=.5?C.yellow:pct>=.25?C.orange:C.red;
+                const semana=new Date(c.data+"T12:00:00").toLocaleDateString("pt-BR",{day:"2-digit",month:"short"});
+                return(
+                  <Card key={c.id||i} style={{padding:"12px 14px"}}>
+                    <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:8}}>
+                      <p style={{fontSize:12,fontWeight:700}}>{semana}</p>
+                      <span style={{fontSize:12,fontWeight:800,color:col}}>{score}/16</span>
+                    </div>
+                    <Bar value={score} max={16} color={col} h={4}/>
+                    <div style={{display:"flex",gap:6,flexWrap:"wrap",marginTop:8}}>
+                      {[{k:"p1",l:"Treino"},{k:"p2",l:"Alim."},{k:"p3",l:"Sono"},{k:"p4",l:"Energia"}].map(({k,l})=>{
+                        const s=scoreOpt(k,c[k]);
+                        const cc=s>=3?C.green:s===2?C.yellow:C.red;
+                        return<span key={k} style={{fontSize:10,color:cc,background:`${cc}15`,padding:"3px 8px",borderRadius:10}}>{l} {"⬛".repeat(4).split("").map((_,j)=>j<s?"■":"□").join("")}</span>;
+                      })}
+                    </div>
+                    {c.analise&&<p style={{fontSize:11,color:C.dim,marginTop:8,lineHeight:1.5}}>{c.analise.slice(0,120)}{c.analise.length>120?"...":""}</p>}
+                  </Card>
+                );
+              })}
+            </div>
+          )}
+        </div>
+      )}
     </Sheet>
   );
 }
@@ -1851,13 +1953,15 @@ export default function App(){
   const [syncing,setSyncing]=useState(false);
   const [syncingHealth,setSyncingHealth]=useState(false);
   const [saudeDaily,setSaudeDaily]=useState([]);
+  const [customFoods,setCustomFoods]=useState([]);
+  const [checkinSemanais,setCheckinSemanais]=useState([]);
   const trainingsRef=useRef([]);
   const saudeDailyRef=useRef([]);
   useEffect(()=>{ saudeDailyRef.current=saudeDaily; },[saudeDaily]);
 
   const loadAll=useCallback(async()=>{
     try{
-      const [p,m,t,h,c,w,comp,sd]=await Promise.all([
+      const [p,m,t,h,c,w,comp,sd,cf,cs]=await Promise.all([
         DB.get("perfil","?order=created_at.desc&limit=1"),
         DB.get("refeicoes","?order=created_at.desc&limit=300"),
         DB.get("treinos","?order=created_at.desc&limit=100"),
@@ -1866,9 +1970,11 @@ export default function App(){
         DB.get("pesos","?order=created_at.desc&limit=90"),
         DB.get("composicao_corporal","?order=created_at.desc&limit=30").catch(()=>[]),
         DB.get("saude_diaria","?order=data.desc&limit=400").catch(()=>[]),
+        DB.get("alimentos_custom","?order=created_at.asc").catch(()=>[]),
+        DB.get("checkins_semanais","?order=data.desc&limit=20").catch(()=>[]),
       ]);
       if(p?.length)setProfile(p[0]);
-      setMeals(m||[]);setTrainings(t||[]);setHabits(h||[]);setCheckins(c||[]);setWeights(w||[]);setCompositions(comp||[]);setSaudeDaily(sd||[]);
+      setMeals(m||[]);setTrainings(t||[]);setHabits(h||[]);setCheckins(c||[]);setWeights(w||[]);setCompositions(comp||[]);setSaudeDaily(sd||[]);setCustomFoods(cf||[]);setCheckinSemanais(cs||[]);
     }catch(e){console.error(e);}
     setLoading(false);
   },[]);
@@ -1982,6 +2088,9 @@ export default function App(){
   };
   const addHabit=async(data)=>{try{const [s]=await DB.post("habitos",data);setHabits(h=>[...h,s]);}catch(e){console.error(e);}};
   const remHabit=async(id)=>{try{await DB.del("habitos",`?id=eq.${id}`);setHabits(h=>h.filter(x=>x.id!==id));}catch(e){console.error(e);}};
+  const addCustomFood=async(data)=>{try{const [s]=await DB.post("alimentos_custom",data);setCustomFoods(f=>[...f,s]);}catch(e){console.error(e);alert("Erro ao salvar: "+e.message);}};
+  const delCustomFood=async(id)=>{try{await DB.del("alimentos_custom",`?id=eq.${id}`);setCustomFoods(f=>f.filter(x=>x.id!==id));}catch(e){console.error(e);}};
+  const saveCheckinSemanal=async(data)=>{try{const [s]=await DB.post("checkins_semanais",data);setCheckinSemanais(c=>[s,...c]);}catch(e){console.error(e);}};
 
   if(loading)return(
     <div style={{minHeight:"100vh",background:"#0f172a",display:"flex",alignItems:"center",justifyContent:"center",flexDirection:"column",gap:16,fontFamily:"'Plus Jakarta Sans',sans-serif"}}>
@@ -1995,7 +2104,7 @@ export default function App(){
   const pages={
     home:<Dashboard profile={profile} meals={meals} weights={weights} checkins={checkins} habits={habits} trainings={trainings} onTab={setTab}/>,
     training:<Training profile={profile} trainings={trainings} onAdd={addTraining} onDelete={delTraining} onImport={importTrainings}/>,
-    nutrition:<Nutrition profile={profile} meals={meals} onAdd={addMeal} onDelete={delMeal}/>,
+    nutrition:<Nutrition profile={profile} meals={meals} onAdd={addMeal} onDelete={delMeal} customFoods={customFoods} onAddCustomFood={addCustomFood} onDeleteCustomFood={delCustomFood}/>,
     health:<Health profile={profile} weights={weights} compositions={compositions} saudeDaily={saudeDaily} onAddWeight={addWeight} onAddComp={addComp} onDeleteWeight={delWeight} onImportSaude={importSaudeDaily}/>,
     journey:<Journey profile={profile} weights={weights} trainings={trainings}/>,
     habits:<Habits habits={habits} checkins={checkins} onToggle={toggleCI} onAdd={addHabit} onRemove={remHabit}/>,
@@ -2017,7 +2126,7 @@ export default function App(){
         button:active{transform:scale(.97);}
       `}</style>
       <div>{pages[tab]||pages.home}</div>
-      {showCheckin&&<CheckinSemanal profile={profile} weights={weights} meals={meals} onClose={()=>setShowCheckin(false)}/>}
+      {showCheckin&&<CheckinSemanal profile={profile} weights={weights} meals={meals} onClose={()=>setShowCheckin(false)} onSave={saveCheckinSemanal} checkinHistory={checkinSemanais}/>}
       {showMais&&(
         <Sheet title="Menu" onClose={()=>setShowMais(false)}>
           {MAIS_ITEMS.map(item=>(
