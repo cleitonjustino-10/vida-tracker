@@ -258,7 +258,7 @@ function Dashboard({profile,meals,weights,checkins,habits,trainings,onTab}){
   const protOk=prot>=(profile.prot_meta||0)*0.8;
   const habitosOk=habits.length>0&&ctd.length>=(habits.length*0.7);
   const aguaOk=aguaMl>=metaAgua*0.9;
-  const addAgua=(ml)=>{const n=aguaMl+ml;setAguaMl(n);localStorage.setItem("agua_ml_"+todayStr(),n);};
+  const addAgua=(ml)=>{const n=aguaMl+ml;setAguaMl(n);localStorage.setItem("agua_ml_"+todayStr(),n);if(n>=metaAgua&&aguaMl<metaAgua&&navigator.vibrate)navigator.vibrate([80,50,80]);};
   const remAgua=(ml)=>{const n=Math.max(0,aguaMl-ml);setAguaMl(n);localStorage.setItem("agua_ml_"+todayStr(),n);};
   const checkItems=[
     {id:"peso",emoji:"⚖️",label:"Peso do dia",done:pesoHoje,tab:"health",meta:pesoHoje?`${lw}kg`:"Registrar →"},
@@ -609,6 +609,7 @@ function Training({profile,trainings,onAdd,onDelete,onImport}){
           </div>
         );})}
       </div>
+      {(()=>{const rirSess=trainings.filter(t=>t.modalidade==="musculacao"&&t.rir).slice(0,20);if(rirSess.length<3)return null;const vals=rirSess.map(t=>parseInt(t.rir)||0).filter(v=>v>0);if(vals.length<3)return null;const mn=Math.min(...vals),mx=Math.max(...vals),range=mx-mn||1;const avg=(vals.reduce((s,v)=>s+v,0)/vals.length).toFixed(1);return(<Card style={{marginBottom:14}}><p style={{fontSize:10,color:C.dim,letterSpacing:".12em",textTransform:"uppercase",fontWeight:700,marginBottom:4}}>RIR — Musculação · últimas {rirSess.length} sessões</p><p style={{fontSize:11,color:C.muted,marginBottom:10}}>Reps in Reserve · média: <span style={{color:C.purple,fontWeight:700}}>{avg}</span> · quanto menor, maior intensidade</p><div style={{display:"flex",gap:3,alignItems:"flex-end",height:48}}>{[...rirSess].reverse().map((t,i)=>{const v=parseInt(t.rir)||0;const h=v>0?8+((v-mn)/range)*36:4;const isLast=i===rirSess.length-1;return(<div key={i} style={{flex:1,display:"flex",flexDirection:"column",alignItems:"center",gap:2}}><div style={{width:"100%",height:h,borderRadius:3,background:isLast?C.purple:`${C.purple}55`,boxShadow:isLast?`0 0 6px ${C.purple}60`:"none"}} title={`RIR ${t.rir} · ${fmt(t.data)}`}/><span style={{fontSize:6,color:C.dim,overflow:"hidden",maxWidth:"100%",whiteSpace:"nowrap"}}>{i%4===0?fmt(t.data).split("/")[0]:""}</span></div>);})}</div></Card>);})()}
       <div style={{display:"flex",gap:8,marginBottom:16,marginTop:4}}>
         <Btn onClick={()=>setShow(true)} full>+ Registrar treino</Btn>
         <Btn onClick={()=>{setShowImport(true);setImportResult(null);}} variant="blue" style={{flexShrink:0}}>📥 Import</Btn>
@@ -1297,8 +1298,10 @@ function Health({profile,weights,compositions,saudeDaily=[],onAddWeight,onAddCom
           if(!arr.length)return null;
           const vals=arr.map(d=>d[valKey]);
           const mn=Math.min(...vals),mx=Math.max(...vals),range=mx-mn||1;
-          return<div style={{display:"flex",gap:2,alignItems:"flex-end",height}}>{[...arr].reverse().map((d,i)=>{const h=8+((d[valKey]-mn)/range)*(height-8);return<div key={i} style={{flex:1,height:h,borderRadius:3,background:i===arr.length-1?color:`${color}55`}}/>;})}</div>;
+          const rev=[...arr].reverse();
+          return<div><div style={{display:"flex",gap:2,alignItems:"flex-end",height}}>{rev.map((d,i)=>{const h=8+((d[valKey]-mn)/range)*(height-8);const isLast=i===rev.length-1;return<div key={i} title={`${d[valKey]} · ${fmt(d.data)}`} style={{flex:1,height:h,borderRadius:3,background:isLast?color:`${color}55`,boxShadow:isLast?`0 0 6px ${color}60`:"none"}}/>;})}</div><div style={{display:"flex",gap:2,marginTop:4}}>{rev.map((d,i)=><div key={i} style={{flex:1,textAlign:"center",fontSize:7,color:C.dim,overflow:"hidden"}}>{i%Math.max(1,Math.floor(rev.length/5))===0?fmt(d.data):"" }</div>)}</div></div>;
         };
+        const vo2Arr=saudeDaily.filter(d=>d.vo2max>0).slice(0,30);
         return(
           <>
             <input ref={csvHealthRef} type="file" accept=".csv" style={{display:"none"}} onChange={e=>importHealthFromFile(e.target.files[0])}/>
@@ -1324,7 +1327,8 @@ function Health({profile,weights,compositions,saudeDaily=[],onAddWeight,onAddCom
             </div>
             {hrvArr.length>3&&<Card style={{marginBottom:12}}><p style={{fontSize:10,color:C.dim,letterSpacing:".12em",textTransform:"uppercase",fontWeight:700,marginBottom:10}}>HRV — últimos {hrvArr.length} dias</p><MiniBar arr={hrvArr} valKey="hrv" color={C.green}/></Card>}
             {stepsArr.length>3&&<Card style={{marginBottom:12}}><p style={{fontSize:10,color:C.dim,letterSpacing:".12em",textTransform:"uppercase",fontWeight:700,marginBottom:10}}>Passos diários</p><MiniBar arr={stepsArr} valKey="steps" color={C.blue}/></Card>}
-            {fcArr.length>3&&<Card style={{marginBottom:12}}><p style={{fontSize:10,color:C.dim,letterSpacing:".12em",textTransform:"uppercase",fontWeight:700,marginBottom:10}}>FC Repouso (menor = melhor)</p><MiniBar arr={fcArr} valKey="fc_repouso" color={C.red} height={40}/></Card>}
+            {fcArr.length>3&&<Card style={{marginBottom:12}}><p style={{fontSize:10,color:C.dim,letterSpacing:".12em",textTransform:"uppercase",fontWeight:700,marginBottom:10}}>FC Repouso — últimos {fcArr.length} dias <span style={{color:C.muted,fontWeight:400}}>(menor = melhor)</span></p><MiniBar arr={fcArr} valKey="fc_repouso" color={C.red} height={40}/></Card>}
+            {vo2Arr.length>2&&<Card style={{marginBottom:12}}><div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:10}}><p style={{fontSize:10,color:C.dim,letterSpacing:".12em",textTransform:"uppercase",fontWeight:700}}>VO₂max — evolução</p><Badge color={C.purple}>{vo2Arr[0].vo2max} ml/kg</Badge></div><MiniBar arr={vo2Arr} valKey="vo2max" color={C.purple} height={40}/></Card>}
             <SLbl>Histórico recente</SLbl>
             {saudeDaily.length===0?<div style={{textAlign:"center",padding:"32px 0",color:C.dim}}><p style={{fontSize:32,marginBottom:8}}>⌚</p><p style={{fontSize:13}}>Configure o sync em Configurações → Watch</p></div>:
               saudeDaily.slice(0,14).map((d,i)=>(
@@ -1508,6 +1512,33 @@ function Health({profile,weights,compositions,saudeDaily=[],onAddWeight,onAddCom
               </div>
               {medidas.length>1&&(
                 <>
+                  <SLbl>Evolução das medidas</SLbl>
+                  <Card style={{marginBottom:16}}>
+                    {camposMedidas.filter(c=>medidas.filter(m=>m[c.k]).length>=2).map((campo,ci)=>{
+                      const pts=medidas.filter(m=>m[campo.k]).slice(0,8).reverse();
+                      const vals=pts.map(m=>parseFloat(m[campo.k]));
+                      const mn=Math.min(...vals),mx=Math.max(...vals),range=mx-mn||1;
+                      const delta=vals.length>=2?(vals[vals.length-1]-vals[0]).toFixed(1):null;
+                      const dcol=campo.k==="cintura"||campo.k==="quadril"||campo.k==="pescoco"?(parseFloat(delta)<0?C.green:parseFloat(delta)>0?C.red:C.muted):(parseFloat(delta)>0?C.green:parseFloat(delta)<0?C.red:C.muted);
+                      return(
+                        <div key={campo.k} style={{marginBottom:ci<camposMedidas.filter(c=>medidas.filter(m=>m[c.k]).length>=2).length-1?16:0}}>
+                          <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:6}}>
+                            <p style={{fontSize:11,color:C.muted,fontWeight:600}}>{campo.l}</p>
+                            <div style={{display:"flex",alignItems:"center",gap:8}}>
+                              <span style={{fontFamily:"'Clash Display',sans-serif",fontSize:15,fontWeight:700,color:C.blue}}>{vals[vals.length-1]}cm</span>
+                              {delta!==null&&<Badge color={dcol}>{parseFloat(delta)>0?"+":""}{delta}cm</Badge>}
+                            </div>
+                          </div>
+                          <div style={{display:"flex",gap:3,alignItems:"flex-end",height:36}}>
+                            {pts.map((m,i)=>{const v=parseFloat(m[campo.k]);const h=6+((v-mn)/range)*28;const isLast=i===pts.length-1;return(<div key={i} style={{flex:1,height:h,borderRadius:3,background:isLast?C.blue:`${C.blue}40`,boxShadow:isLast?`0 0 5px ${C.blue}50`:"none"}} title={`${v}cm · ${fmt(m.data)}`}/>);})}
+                          </div>
+                          <div style={{display:"flex",gap:3,marginTop:3}}>
+                            {pts.map((m,i)=><div key={i} style={{flex:1,textAlign:"center",fontSize:7,color:C.dim}}>{i===0||i===pts.length-1?fmt(m.data).split("/")[0]:""}</div>)}
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </Card>
                   <SLbl>Histórico</SLbl>
                   {medidas.slice(0,6).map((m,i)=>(
                     <Card key={i} style={{marginBottom:8}}>
@@ -1684,7 +1715,7 @@ function Habits({habits,checkins,onToggle,onAdd,onRemove}){
         {habits.map(h=>{
           const done=todayCI.includes(h.id);const cat=CATS[h.cat]||CATS.mente;
           return(
-            <div key={h.id} onClick={()=>onToggle(h)} style={{display:"flex",alignItems:"center",gap:12,padding:"13px 15px",borderRadius:16,cursor:"pointer",border:done?`1.5px solid ${cat.color}40`:`1px solid ${C.border}`,background:done?`${cat.color}10`:C.card,transition:"all .2s"}}>
+            <div key={h.id} onClick={()=>{if(navigator.vibrate)navigator.vibrate(50);onToggle(h);}} style={{display:"flex",alignItems:"center",gap:12,padding:"13px 15px",borderRadius:16,cursor:"pointer",border:done?`1.5px solid ${cat.color}40`:`1px solid ${C.border}`,background:done?`${cat.color}10`:C.card,transition:"all .2s"}}>
               <div style={{width:28,height:28,borderRadius:9,border:done?`2px solid ${cat.color}`:"2px solid rgba(255,255,255,.1)",background:done?cat.color:"transparent",display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0,boxShadow:done?`0 0 12px ${cat.color}50`:"none"}}>{done&&<span style={{fontSize:13,color:"#000",fontWeight:900}}>✓</span>}</div>
               <span style={{fontSize:22,flexShrink:0}}>{h.emoji}</span>
               <div style={{flex:1}}><p style={{fontSize:13,fontWeight:700,color:done?"#fff":"rgba(255,255,255,.75)",textDecoration:done?"line-through":"none",textDecorationColor:"rgba(255,255,255,.25)"}}>{h.titulo}</p><Badge color={cat.color} style={{marginTop:4}}>{cat.label}</Badge></div>
@@ -1932,6 +1963,37 @@ function CheckinSemanal({profile,weights,meals,onClose,onSave,checkinHistory=[]}
           </button>
           {verHistorico&&(
             <div style={{marginTop:12,display:"flex",flexDirection:"column",gap:10}}>
+              {checkinHistory.length>=3&&(()=>{
+                const cats=[{k:"p1",l:"Treino",c:C.purple},{k:"p2",l:"Alim.",c:C.green},{k:"p3",l:"Sono",c:C.blue},{k:"p4",l:"Energia",c:C.yellow}];
+                const sorted=[...checkinHistory].sort((a,b)=>a.data>b.data?1:-1).slice(-12);
+                return(
+                  <Card style={{marginBottom:4}}>
+                    <p style={{fontSize:10,color:C.dim,letterSpacing:".12em",textTransform:"uppercase",fontWeight:700,marginBottom:12}}>Tendência por categoria — últimas {sorted.length} semanas</p>
+                    {cats.map(cat=>{
+                      const vals=sorted.map(c=>{const opts=perguntas.find(p=>p.id===cat.k)?.opts||[];const i=opts.indexOf(c[cat.k]);return i>=0?i+1:0;});
+                      const hasData=vals.some(v=>v>0);
+                      if(!hasData)return null;
+                      const avg=(vals.filter(v=>v>0).reduce((s,v)=>s+v,0)/vals.filter(v=>v>0).length).toFixed(1);
+                      const trend=vals.length>=3?(vals[vals.length-1]-vals[vals.length-4]>0?"↑":vals[vals.length-1]-vals[vals.length-4]<0?"↓":"→"):"";
+                      const trendCol=trend==="↑"?C.green:trend==="↓"?C.red:C.muted;
+                      return(
+                        <div key={cat.k} style={{marginBottom:10}}>
+                          <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:4}}>
+                            <span style={{fontSize:11,color:C.muted,fontWeight:600}}>{cat.l}</span>
+                            <div style={{display:"flex",alignItems:"center",gap:6}}>
+                              <span style={{fontSize:10,color:cat.c,fontWeight:700}}>{avg}/4</span>
+                              <span style={{fontSize:13,color:trendCol,fontWeight:700}}>{trend}</span>
+                            </div>
+                          </div>
+                          <div style={{display:"flex",gap:3,alignItems:"flex-end",height:28}}>
+                            {vals.map((v,i)=>{const h=v>0?5+(v/4)*20:2;const isLast=i===vals.length-1;return(<div key={i} style={{flex:1,height:h,borderRadius:2,background:v>0?(isLast?cat.c:`${cat.c}50`):"rgba(255,255,255,.05)"}}/>);} )}
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </Card>
+                );
+              })()}
               {checkinHistory.slice(0,8).map((c,i)=>{
                 const score=scoreCheckin(c);
                 const pct=score/16;
