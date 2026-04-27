@@ -732,7 +732,7 @@ function Training({profile,trainings,onAdd,onDelete,onImport}){
 }
 
 // NUTRITION — 4 subtabs: Hoje / Calendário / TACO / Foto IA
-function Nutrition({profile,meals,onAdd,onDelete,customFoods=[],onAddCustomFood,onDeleteCustomFood}){
+function Nutrition({profile,meals,onAdd,onDelete,customFoods=[],onAddCustomFood,onUpdateCustomFood,onDeleteCustomFood}){
   const [sub,setSub]=useState("hoje");
   const [selDate,setSelDate]=useState(todayStr());
   const [mealDate,setMealDate]=useState(todayStr());
@@ -748,6 +748,7 @@ function Nutrition({profile,meals,onAdd,onDelete,customFoods=[],onAddCustomFood,
   const [loadTaco,setLoadTaco]=useState(false);
   const [tacoCart,setTacoCart]=useState([]);
   const [showAddCustom,setShowAddCustom]=useState(false);
+  const [editingCustomFood,setEditingCustomFood]=useState(null);
   const [customForm,setCustomForm]=useState({nome:"",calorias:"",proteina:"",carbs:"",gordura:"",porcao_padrao:"100"});
   const [loadingAI,setLoadingAI]=useState(false);
 
@@ -802,12 +803,17 @@ function Nutrition({profile,meals,onAdd,onDelete,customFoods=[],onAddCustomFood,
     }catch{}
     setLoadingAI(false);
   };
+  const openEditCustom=(food)=>{
+    setEditingCustomFood(food);
+    setCustomForm({nome:food.nome,calorias:String(food.calorias),proteina:String(food.proteina),carbs:String(food.carbs),gordura:String(food.gordura),porcao_padrao:String(food.porcao_padrao)});
+  };
+  const closeCustomForm=()=>{setShowAddCustom(false);setEditingCustomFood(null);setCustomForm({nome:"",calorias:"",proteina:"",carbs:"",gordura:"",porcao_padrao:"100"});};
   const saveCustomFood=async()=>{
     if(!customForm.nome.trim())return;
-    const food={nome:customForm.nome,categoria:"Custom",calorias:parseFloat(customForm.calorias)||0,proteina:parseFloat(customForm.proteina)||0,carbs:parseFloat(customForm.carbs)||0,gordura:parseFloat(customForm.gordura)||0,porcao_padrao:parseFloat(customForm.porcao_padrao)||100};
-    await onAddCustomFood(food);
-    setCustomForm({nome:"",calorias:"",proteina:"",carbs:"",gordura:"",porcao_padrao:"100"});
-    setShowAddCustom(false);
+    const data={nome:customForm.nome,categoria:"Custom",calorias:parseFloat(customForm.calorias)||0,proteina:parseFloat(customForm.proteina)||0,carbs:parseFloat(customForm.carbs)||0,gordura:parseFloat(customForm.gordura)||0,porcao_padrao:parseFloat(customForm.porcao_padrao)||100};
+    if(editingCustomFood){await onUpdateCustomFood(editingCustomFood.id,data);}
+    else{await onAddCustomFood(data);}
+    closeCustomForm();
   };
 
   const tacoMacros=(food,qtd)=>{
@@ -984,7 +990,7 @@ function Nutrition({profile,meals,onAdd,onDelete,customFoods=[],onAddCustomFood,
                       <Btn onClick={e=>addToCart(food,e)} variant="ghost" style={{flex:1}}>+ Grupo</Btn>
                       <Btn onClick={e=>addTacoDirect(food,e)} style={{flex:1}}>Adicionar direto</Btn>
                     </div>
-                    {food._custom&&<Btn onClick={e=>{e.stopPropagation();onDeleteCustomFood(food.id);setTacoSel(null);setTacoR(r=>r.filter(x=>x.id!==food.id));}} variant="danger" full style={{marginTop:8}}>🗑 Excluir alimento custom</Btn>}
+                    {food._custom&&<div style={{display:"flex",gap:8,marginTop:8}}><Btn onClick={e=>{e.stopPropagation();openEditCustom(food);}} variant="blue" style={{flex:1}}>✎ Editar</Btn><Btn onClick={e=>{e.stopPropagation();onDeleteCustomFood(food.id);setTacoSel(null);setTacoR(r=>r.filter(x=>x.id!==food.id));}} variant="danger" style={{flex:1}}>🗑 Excluir</Btn></div>}
                   </div>
                 )}
               </Card>
@@ -999,14 +1005,17 @@ function Nutrition({profile,meals,onAdd,onDelete,customFoods=[],onAddCustomFood,
             {customFoods.length===0&&<p style={{fontSize:12,color:C.dim,textAlign:"center",padding:"12px 0"}}>Nenhum alimento customizado ainda. Adicione acarajé, vatapá, ou qualquer alimento que não está no TACO.</p>}
             {customFoods.map(food=>(
               <Card key={food.id} style={{marginBottom:8,display:"flex",justifyContent:"space-between",alignItems:"center"}}>
-                <div><div style={{display:"flex",alignItems:"center",gap:6,marginBottom:2}}><p style={{fontSize:13,fontWeight:700}}>{food.nome}</p><Badge color={C.purple} style={{fontSize:7}}>Custom</Badge></div><p style={{fontSize:11,color:C.muted}}>{food.calorias}kcal · {food.proteina}g prot · por {food.porcao_padrao}g</p></div>
-                <DelBtn onClick={()=>onDeleteCustomFood(food.id)}/>
+                <div style={{flex:1}}><div style={{display:"flex",alignItems:"center",gap:6,marginBottom:2}}><p style={{fontSize:13,fontWeight:700}}>{food.nome}</p><Badge color={C.purple} style={{fontSize:7}}>Custom</Badge></div><p style={{fontSize:11,color:C.muted}}>{food.calorias}kcal · {food.proteina}g prot · por {food.porcao_padrao}g</p></div>
+                <div style={{display:"flex",gap:6}}>
+                  <button onClick={()=>openEditCustom(food)} style={{background:"rgba(96,165,250,.12)",border:"none",borderRadius:7,width:28,height:28,cursor:"pointer",color:C.blue,fontSize:13,display:"flex",alignItems:"center",justifyContent:"center"}}>✎</button>
+                  <DelBtn onClick={()=>onDeleteCustomFood(food.id)}/>
+                </div>
               </Card>
             ))}
           </div>
 
-          {showAddCustom&&(
-            <Sheet title="➕ Novo alimento" subtitle="Digite o nome e use a IA para preencher automaticamente" onClose={()=>setShowAddCustom(false)}>
+          {(showAddCustom||editingCustomFood)&&(
+            <Sheet title={editingCustomFood?"✎ Editar alimento":"➕ Novo alimento"} subtitle="Digite o nome e use a IA para preencher automaticamente" onClose={closeCustomForm}>
               <FIn label="Nome do alimento" value={customForm.nome} onChange={v=>setCustomForm(f=>({...f,nome:v}))} placeholder="Ex: Acarajé, Vatapá, Tapioca recheada..." req/>
               <Btn onClick={buscarInfoAI} full variant="blue" disabled={!customForm.nome.trim()||loadingAI} style={{marginBottom:16}}>{loadingAI?"🤖 Buscando referências...":"🤖 Buscar valores com IA"}</Btn>
               {loadingAI&&<Spin text="IA buscando referências nutricionais"/>}
@@ -1017,7 +1026,7 @@ function Nutrition({profile,meals,onAdd,onDelete,customFoods=[],onAddCustomFood,
                 <FIn label="Carbs (g)" type="number" value={customForm.carbs} onChange={v=>setCustomForm(f=>({...f,carbs:v}))} placeholder="0"/>
                 <FIn label="Gordura (g)" type="number" value={customForm.gordura} onChange={v=>setCustomForm(f=>({...f,gordura:v}))} placeholder="0"/>
               </div>
-              <Btn onClick={saveCustomFood} full disabled={!customForm.nome.trim()}>Salvar alimento</Btn>
+              <Btn onClick={saveCustomFood} full disabled={!customForm.nome.trim()}>{editingCustomFood?"Salvar alterações":"Salvar alimento"}</Btn>
             </Sheet>
           )}
         </>
@@ -2089,6 +2098,7 @@ export default function App(){
   const addHabit=async(data)=>{try{const [s]=await DB.post("habitos",data);setHabits(h=>[...h,s]);}catch(e){console.error(e);}};
   const remHabit=async(id)=>{try{await DB.del("habitos",`?id=eq.${id}`);setHabits(h=>h.filter(x=>x.id!==id));}catch(e){console.error(e);}};
   const addCustomFood=async(data)=>{try{const [s]=await DB.post("alimentos_custom",data);setCustomFoods(f=>[...f,s]);}catch(e){console.error(e);alert("Erro ao salvar: "+e.message);}};
+  const updateCustomFood=async(id,data)=>{try{const [s]=await DB.patch("alimentos_custom",`?id=eq.${id}`,data);setCustomFoods(f=>f.map(x=>x.id===id?{...x,...data}:x));}catch(e){console.error(e);alert("Erro ao atualizar: "+e.message);}};
   const delCustomFood=async(id)=>{try{await DB.del("alimentos_custom",`?id=eq.${id}`);setCustomFoods(f=>f.filter(x=>x.id!==id));}catch(e){console.error(e);}};
   const saveCheckinSemanal=async(data)=>{try{const [s]=await DB.post("checkins_semanais",data);setCheckinSemanais(c=>[s,...c]);}catch(e){console.error(e);}};
 
@@ -2104,7 +2114,7 @@ export default function App(){
   const pages={
     home:<Dashboard profile={profile} meals={meals} weights={weights} checkins={checkins} habits={habits} trainings={trainings} onTab={setTab}/>,
     training:<Training profile={profile} trainings={trainings} onAdd={addTraining} onDelete={delTraining} onImport={importTrainings}/>,
-    nutrition:<Nutrition profile={profile} meals={meals} onAdd={addMeal} onDelete={delMeal} customFoods={customFoods} onAddCustomFood={addCustomFood} onDeleteCustomFood={delCustomFood}/>,
+    nutrition:<Nutrition profile={profile} meals={meals} onAdd={addMeal} onDelete={delMeal} customFoods={customFoods} onAddCustomFood={addCustomFood} onUpdateCustomFood={updateCustomFood} onDeleteCustomFood={delCustomFood}/>,
     health:<Health profile={profile} weights={weights} compositions={compositions} saudeDaily={saudeDaily} onAddWeight={addWeight} onAddComp={addComp} onDeleteWeight={delWeight} onImportSaude={importSaudeDaily}/>,
     journey:<Journey profile={profile} weights={weights} trainings={trainings}/>,
     habits:<Habits habits={habits} checkins={checkins} onToggle={toggleCI} onAdd={addHabit} onRemove={remHabit}/>,
