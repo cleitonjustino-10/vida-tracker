@@ -387,6 +387,20 @@ function Dashboard({profile,meals,weights,checkins,habits,trainings,onTab,saudeD
         </div>
       </div>
 
+      {(()=>{const xpRestante=xpN-(profile.xp||0);const diasApp=Math.max(1,days);const xpPorDia=Math.round((profile.xp||0)/diasApp);const diasParaLvl=xpPorDia>0?Math.round(xpRestante/xpPorDia):null;const pctLvl=Math.round(((profile.xp||0)-xpB)/(xpN-xpB)*100);return(
+        <div style={{padding:"0 20px",marginBottom:14}}>
+          <div style={{display:"flex",gap:8,alignItems:"stretch"}}>
+            {[{emoji:LVLN[Math.max(0,lvl-1)]??"🌱",label:"Nível anterior",xp:XPL[Math.max(0,lvl-1)],done:true},{emoji:LVLN[lvl],label:"Atual",xp:profile.xp||0,cur:true},{emoji:LVLN[Math.min(LVLN.length-1,lvl+1)],label:"Próximo",xp:xpN,done:false}].map((n,i)=>(
+              <Card key={i} style={{flex:1,padding:"10px 8px",textAlign:"center",border:n.cur?`1.5px solid rgba(250,204,21,.3)`:undefined,background:n.cur?"rgba(250,204,21,.04)":C.card}}>
+                <p style={{fontSize:9,color:n.cur?C.yellow:C.dim,marginBottom:4,fontWeight:n.cur?700:400,letterSpacing:".08em"}}>{n.label}</p>
+                <p style={{fontSize:11,fontWeight:700,color:n.cur?C.yellow:C.muted,marginBottom:2}}>{n.emoji}</p>
+                <p style={{fontSize:9,color:C.dim}}>{n.xp?.toLocaleString()} XP</p>
+              </Card>
+            ))}
+          </div>
+          {diasParaLvl&&<p style={{fontSize:10,color:C.dim,textAlign:"center",marginTop:8}}>Ao ritmo atual ({xpPorDia} XP/dia) — próximo nível em ~{diasParaLvl} dias · {pctLvl}% concluído</p>}
+        </div>
+      );})()}
       {/* MACROS */}
       <div style={{padding:"0 20px",marginBottom:14}}>
         <div style={{display:"grid",gridTemplateColumns:"1fr 1fr 1fr",gap:10}}>
@@ -780,6 +794,8 @@ function Training({profile,trainings,onAdd,onDelete,onImport}){
 // NUTRITION — 4 subtabs: Hoje / Calendário / TACO / Foto IA
 function Nutrition({profile,meals,onAdd,onDelete,customFoods=[],onAddCustomFood,onUpdateCustomFood,onDeleteCustomFood}){
   const [sub,setSub]=useState("hoje");
+  const [varTip,setVarTip]=useState("");const [loadVar,setLoadVar]=useState(false);
+  const analisarVariedade=async()=>{setLoadVar(true);try{const d7=new Date();d7.setDate(d7.getDate()-7);const ult7=meals.filter(m=>new Date(m.data+"T12:00:00")>=d7);const nomes=[...new Set(ult7.map(m=>m.nome).filter(Boolean))].slice(0,30).join(", ");const avgCal=Math.round(ult7.reduce((s,m)=>s+(m.calorias||0),0)/Math.max(1,[...new Set(ult7.map(m=>m.data))].length));const avgProt=Math.round(ult7.reduce((s,m)=>s+(m.proteina||0),0)/Math.max(1,[...new Set(ult7.map(m=>m.data))].length));const r=await callAI([{role:"user",content:`Análise nutricional dos últimos 7 dias de Cleiton (${profile?.peso}kg, meta ${profile?.peso_meta}kg, Ultraman):\nAlimentos consumidos: ${nomes||"Sem dados"}\nMédia calórica: ${avgCal} kcal/dia (meta: ${profile?.cal_meta||2800})\nMédia proteína: ${avgProt}g/dia (meta: ${profile?.prot_meta||0}g)\nAvalie: 1) diversidade de grupos alimentares 2) deficiências prováveis 3) 2 alimentos para adicionar na semana seguinte.`}],"Nutricionista esportivo. Português direto. Máximo 5 frases.",400);setVarTip(r);}catch{setVarTip("Erro ao analisar. Tente novamente.");}setLoadVar(false);};
   const [selDate,setSelDate]=useState(todayStr());
   const [mealDate,setMealDate]=useState(todayStr());
   const [mealType,setMealType]=useState("almoco");
@@ -923,6 +939,14 @@ function Nutrition({profile,meals,onAdd,onDelete,customFoods=[],onAddCustomFood,
                 <Bar value={m.v} max={m.max} color={m.c} h={6}/>
               </div>
             ))}
+          </Card>
+          <Card style={{marginBottom:14,padding:"12px 14px"}}>
+            <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:varTip?10:0}}>
+              <p style={{fontSize:11,fontWeight:700,color:C.muted}}>🥗 Variedade nutricional — últimos 7 dias</p>
+              <Btn onClick={analisarVariedade} disabled={loadVar} sm variant="ghost">{loadVar?"...":"Analisar"}</Btn>
+            </div>
+            {loadVar&&<Spin text="Analisando"/>}
+            {varTip&&!loadVar&&<p style={{fontSize:12,color:"rgba(255,255,255,.7)",lineHeight:1.7,whiteSpace:"pre-line"}}>{varTip}</p>}
           </Card>
           {dayMeals.length>0&&(
             <div style={{display:"flex",gap:6,flexWrap:"wrap",marginBottom:14}}>
@@ -1651,7 +1675,7 @@ function Health({profile,weights,compositions,saudeDaily=[],onAddWeight,onAddCom
 }
 
 // JOURNEY
-function Journey({profile,weights,trainings,checkinSemanais=[]}){
+function Journey({profile,weights,trainings,checkinSemanais=[],meals=[]}){
   const lw=weights[0]?.peso||profile?.peso;
   const lost=Math.max(0,(profile?.peso||0)-(lw||0));
   const phase=lw>130?1:lw>120?2:lw>110?3:lw>100?4:lw>95?5:6;
@@ -1671,6 +1695,21 @@ function Journey({profile,weights,trainings,checkinSemanais=[]}){
   ];
   const earned=BADGES.filter(b=>b.ok);
   const locked=BADGES.filter(b=>!b.ok);
+  const gerarRelatorio=()=>{
+    const now=new Date();const mesNome=now.toLocaleDateString("pt-BR",{month:"long",year:"numeric"});
+    const inicio=new Date(now.getFullYear(),now.getMonth(),1).toISOString().slice(0,10);
+    const fim=now.toISOString().slice(0,10);
+    const trMes=trainings.filter(t=>t.data>=inicio&&t.data<=fim);
+    const mealsMes=meals.filter(m=>m.data>=inicio&&m.data<=fim);
+    const pesoIni=weights.filter(w=>w.data>=inicio).slice(-1)[0]?.peso||weights[0]?.peso||profile?.peso;
+    const pesoFim=weights[0]?.peso||profile?.peso;
+    const porMod=MODALITIES.map(m=>({n:m.label,t:trMes.filter(x=>x.modalidade===m.id).length,min:trMes.filter(x=>x.modalidade===m.id).reduce((s,x)=>s+(x.duracao||0),0)})).filter(x=>x.t>0);
+    const avgCal=mealsMes.length?Math.round(mealsMes.reduce((s,m)=>s+(m.calorias||0),0)/Math.max(1,[...new Set(mealsMes.map(m=>m.data))].length)):0;
+    const avgProt=mealsMes.length?Math.round(mealsMes.reduce((s,m)=>s+(m.proteina||0),0)/Math.max(1,[...new Set(mealsMes.map(m=>m.data))].length)):0;
+    const ciMes=checkinSemanais.filter(c=>c.data>=inicio&&c.data<=fim);
+    const lines=[`VIDA TRACKER — RELATÓRIO MENSAL`,`${mesNome.toUpperCase()}`,`Gerado em: ${now.toLocaleDateString("pt-BR",{weekday:"long",day:"2-digit",month:"long",year:"numeric"})}`,``,`═══════════════════════════════`,`JORNADA ULTRAMAN`,`═══════════════════════════════`,`Peso início do mês: ${pesoIni} kg`,`Peso atual: ${pesoFim} kg`,`Variação: ${(pesoFim-pesoIni).toFixed(1)} kg`,`Total perdido (desde início): -${lost.toFixed(1)} kg`,`Fase atual: ${ULTRAMAN[phase-1]?.name}`,``,`═══════════════════════════════`,`TREINOS DO MÊS`,`═══════════════════════════════`,`Total: ${trMes.length} treinos · ${trMes.reduce((s,t)=>s+(t.duracao||0),0)} minutos`,...porMod.map(m=>`  • ${m.n}: ${m.t}x (${m.min}min)`),``,`═══════════════════════════════`,`NUTRIÇÃO`,`═══════════════════════════════`,`Refeições registradas: ${mealsMes.length}`,`Média calórica diária: ${avgCal} kcal (meta: ${profile?.cal_meta||2800})`,`Média de proteína diária: ${avgProt}g (meta: ${profile?.prot_meta||0}g)`,``,...(ciMes.length>0?[`═══════════════════════════════`,`CHECK-INS SEMANAIS`,`═══════════════════════════════`,...ciMes.map(c=>{const s=["p1","p2","p3","p4"].reduce((acc,k)=>{const opts=["opt1","opt2","opt3","opt4"];const v=k==="p1"?["😴 Fraca","😐 Regular","💪 Boa","🔥 Incrível"]:k==="p2"?["😴 Fugi muito","😐 Mais ou menos","✅ No plano","🎯 Perfeito"]:k==="p3"?["😫 Péssimo","😐 Regular","😴 Bom","⭐ Ótimo"]:["🪫 Sem energia","😐 Ok","⚡ Bem disposto","🚀 No máximo"];const i=v.indexOf(c[k]);return acc+(i>=0?i+1:2);},0);return`  • ${fmt(c.data)}: ${s}/16 pts`;})]:[]),(ciMes.length>0?[""]:[]),`═══════════════════════════════`,`Vida Tracker · vida-tracker.app`,`═══════════════════════════════`];
+    const blob=new Blob([lines.join("\n")],{type:"text/plain;charset=utf-8"});const url=URL.createObjectURL(blob);const a=document.createElement("a");a.href=url;a.download=`relatorio-${now.getFullYear()}-${String(now.getMonth()+1).padStart(2,"0")}.txt`;a.click();URL.revokeObjectURL(url);
+  };
   const [planoFase,setPlanoFase]=useState("");
   const [loadPlanoFase,setLoadPlanoFase]=useState(false);
   const [faseExpandida,setFaseExpandida]=useState(null);
@@ -1695,6 +1734,7 @@ function Journey({profile,weights,trainings,checkinSemanais=[]}){
           {[{v:`-${lost.toFixed(1)}kg`,l:"Perdidos",c:C.green},{v:trainings.length,l:"Treinos",c:C.yellow}].map((s,i)=><div key={i} style={{textAlign:"center"}}><p style={{fontFamily:"'Clash Display',sans-serif",fontSize:24,fontWeight:700,color:s.c}}>{s.v}</p><p style={{fontSize:9,color:C.dim,letterSpacing:".1em",textTransform:"uppercase"}}>{s.l}</p></div>)}
         </div>
       </div>
+      <Btn onClick={gerarRelatorio} variant="ghost" full style={{marginBottom:20}}>📄 Baixar relatório mensal</Btn>
       <SLbl>Conquistas</SLbl>
       {earned.length>0&&(
         <div style={{display:"flex",flexWrap:"wrap",gap:8,marginBottom:16}}>
@@ -2116,6 +2156,8 @@ export default function App(){
   const [showMais,setShowMais]=useState(false);
   const [deferredInstall,setDeferredInstall]=useState(null);
   const [showInstallBanner,setShowInstallBanner]=useState(!localStorage.getItem("install_dismissed"));
+  const [isOnline,setIsOnline]=useState(navigator.onLine);
+  useEffect(()=>{const on=()=>setIsOnline(true);const off=()=>setIsOnline(false);window.addEventListener("online",on);window.addEventListener("offline",off);return()=>{window.removeEventListener("online",on);window.removeEventListener("offline",off);};},[]);
   useEffect(()=>{const h=e=>{e.preventDefault();setDeferredInstall(e);};window.addEventListener("beforeinstallprompt",h);return()=>window.removeEventListener("beforeinstallprompt",h);},[]);
   const [showQuick,setShowQuick]=useState(false);
   const [syncing,setSyncing]=useState(false);
@@ -2276,7 +2318,7 @@ export default function App(){
     training:<Training profile={profile} trainings={trainings} onAdd={addTraining} onDelete={delTraining} onImport={importTrainings}/>,
     nutrition:<Nutrition profile={profile} meals={meals} onAdd={addMeal} onDelete={delMeal} customFoods={customFoods} onAddCustomFood={addCustomFood} onUpdateCustomFood={updateCustomFood} onDeleteCustomFood={delCustomFood}/>,
     health:<Health profile={profile} weights={weights} compositions={compositions} saudeDaily={saudeDaily} onAddWeight={addWeight} onAddComp={addComp} onDeleteWeight={delWeight} onImportSaude={importSaudeDaily}/>,
-    journey:<Journey profile={profile} weights={weights} trainings={trainings} checkinSemanais={checkinSemanais}/>,
+    journey:<Journey profile={profile} weights={weights} trainings={trainings} checkinSemanais={checkinSemanais} meals={meals}/>,
     habits:<Habits habits={habits} checkins={checkins} onToggle={toggleCI} onAdd={addHabit} onRemove={remHabit}/>,
     settings:<Settings profile={profile} onUpdateProfile={setProfile} onSyncNow={runHFSync} syncing={syncing} onSyncHealthNow={runHealthSync} syncingHealth={syncingHealth}/>,
   };
@@ -2295,7 +2337,8 @@ export default function App(){
         ::-webkit-scrollbar{width:2px;}::-webkit-scrollbar-thumb{background:rgba(255,255,255,.1);border-radius:2px;}
         button:active{transform:scale(.97);}
       `}</style>
-      <div>{pages[tab]||pages.home}</div>
+      {!isOnline&&<div style={{position:"fixed",top:0,left:"50%",transform:"translateX(-50%)",width:"100%",maxWidth:520,background:"rgba(251,146,60,.95)",zIndex:999,padding:"8px 16px",textAlign:"center",fontSize:12,fontWeight:700,color:"#000"}}>📡 Sem conexão — dados em cache</div>}
+      <div style={{paddingTop:isOnline?0:30}}>{pages[tab]||pages.home}</div>
       {showCheckin&&<CheckinSemanal profile={profile} weights={weights} meals={meals} onClose={()=>setShowCheckin(false)} onSave={saveCheckinSemanal} checkinHistory={checkinSemanais}/>}
       {showMais&&(
         <Sheet title="Menu" onClose={()=>setShowMais(false)}>
