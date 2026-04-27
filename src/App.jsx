@@ -221,7 +221,7 @@ function Onboarding({onSave}){
 }
 
 // DASHBOARD
-function Dashboard({profile,meals,weights,checkins,habits,trainings,onTab}){
+function Dashboard({profile,meals,weights,checkins,habits,trainings,onTab,saudeDaily=[],checkinSemanais=[]}){
   const [insight,setInsight]=useState("");
   const [plateauAnalysis,setPlateauAnalysis]=useState("");
   const [loadingPlateau,setLoadingPlateau]=useState(false);
@@ -246,6 +246,9 @@ function Dashboard({profile,meals,weights,checkins,habits,trainings,onTab}){
   const showProtAlert=prot<(profile.prot_meta*0.7)&&hour>=14;
   const protRestante=(profile.prot_meta||0)-prot;
   const streak=calcStreak(trainings,meals,checkins);
+  const phase=lw>130?1:lw>120?2:lw>110?3:lw>100?4:lw>95?5:6;
+  const phaseColor=ULTRAMAN[phase-1]?.color||C.yellow;
+  const todayH=saudeDaily[0];const l30=saudeDaily.slice(0,30);const hrvV=l30.filter(d=>d.hrv>0);const fcV=l30.filter(d=>d.fc_repouso>0);const avgHrv=hrvV.length?Math.round(hrvV.reduce((s,d)=>s+d.hrv,0)/hrvV.length):null;const avgFc=fcV.length?Math.round(fcV.reduce((s,d)=>s+d.fc_repouso,0)/fcV.length):null;const hrvScore=todayH?.hrv&&avgHrv?Math.min(35,Math.round((todayH.hrv/avgHrv)*35)):20;const fcScore=todayH?.fc_repouso?(todayH.fc_repouso<60?25:todayH.fc_repouso<70?18:10):15;const lastCI=checkinSemanais[0];const slOpts=["😫 Péssimo","😐 Regular","😴 Bom","⭐ Ótimo"];const slIdx=lastCI?slOpts.indexOf(lastCI.p3):-1;const sleepScore=slIdx>=0?[0,8,18,25][slIdx]:15;const last3tr=trainings.filter(t=>(new Date()-new Date(t.data+"T12:00:00"))<3*86400000).length;const loadScore=last3tr===0?15:last3tr<=2?12:5;const readiness=Math.min(100,hrvScore+fcScore+sleepScore+loadScore);const readLabel=readiness>=75?"Excelente":readiness>=55?"Bom":readiness>=40?"Moderado":"Descanse";const readColor=readiness>=75?C.green:readiness>=55?C.yellow:C.orange;
   const dateNow=new Date();
   const dayNames=["Domingo","Segunda","Terça","Quarta","Quinta","Sexta","Sábado"];
   const monthNames=["jan","fev","mar","abr","mai","jun","jul","ago","set","out","nov","dez"];
@@ -301,6 +304,7 @@ function Dashboard({profile,meals,weights,checkins,habits,trainings,onTab}){
           <div>
             <p style={{fontSize:11,color:C.dim,letterSpacing:".1em",textTransform:"uppercase",marginBottom:4}}>{dayNames[dateNow.getDay()]}, {dateNow.getDate()} {monthNames[dateNow.getMonth()]}</p>
             <h1 style={{fontFamily:"'Clash Display',sans-serif",fontSize:26,fontWeight:700,lineHeight:1.15}}>{greeting}, <span style={{color:C.yellow}}>{profile.nome?.split(" ")[0]}</span></h1>
+            <p style={{fontSize:11,color:phaseColor,fontWeight:700,marginTop:5}}>⚡ {ULTRAMAN[phase-1]?.name}</p>
           </div>
           <div style={{display:"flex",flexDirection:"column",alignItems:"center",background:"rgba(251,191,36,.08)",border:"1px solid rgba(251,191,36,.2)",borderRadius:14,padding:"8px 14px",gap:1,minWidth:52}}>
             <span style={{fontSize:18}}>🔥</span>
@@ -308,6 +312,14 @@ function Dashboard({profile,meals,weights,checkins,habits,trainings,onTab}){
             <span style={{fontSize:9,color:C.dim,letterSpacing:".06em"}}>dias</span>
           </div>
         </div>
+      </div>
+      <div style={{padding:"0 20px",marginBottom:14}}>
+        <Card style={{padding:"12px 16px",borderLeft:`3px solid ${readColor}`}}>
+          <div style={{display:"flex",justifyContent:"space-between",alignItems:"center"}}>
+            <div><p style={{fontSize:9,color:C.dim,letterSpacing:".12em",textTransform:"uppercase",fontWeight:700,marginBottom:3}}>Prontidão hoje</p><p style={{fontFamily:"'Clash Display',sans-serif",fontSize:28,fontWeight:700,color:readColor,lineHeight:1}}>{readiness}<span style={{fontSize:11,color:C.muted,fontWeight:400,marginLeft:2}}>/100</span></p><p style={{fontSize:11,color:readColor,fontWeight:700,marginTop:3}}>{readLabel}</p></div>
+            <div style={{textAlign:"right",maxWidth:150}}><p style={{fontSize:9,color:C.dim,marginBottom:5,textTransform:"uppercase",letterSpacing:".1em",fontWeight:700}}>Sinais</p>{todayH?.hrv&&<p style={{fontSize:10,color:C.muted,marginBottom:2}}>HRV {todayH.hrv}ms {avgHrv?`(média ${avgHrv})`:""}</p>}{todayH?.fc_repouso&&<p style={{fontSize:10,color:C.muted,marginBottom:2}}>FC {todayH.fc_repouso}bpm</p>}{lastCI?.p3&&<p style={{fontSize:10,color:C.muted}}>Sono: {lastCI.p3.split(" ")[0]}</p>}</div>
+          </div>
+        </Card>
       </div>
 
       {/* DAY PROGRESS */}
@@ -971,6 +983,7 @@ function Nutrition({profile,meals,onAdd,onDelete,customFoods=[],onAddCustomFood,
           </div>
           <FIn label="Data da refeição" type="date" value={mealDate} onChange={setMealDate}/>
           <TypeSelector/>
+          {(()=>{const recent=[...new Map(meals.filter(m=>(new Date()-new Date(m.data+"T12:00:00"))<14*86400000&&m.nome&&m.calorias>0).map(m=>[m.nome,m])).values()].slice(0,8);if(recent.length===0||tacoQ)return null;return(<div style={{marginBottom:14}}><p style={{fontSize:9,color:C.dim,letterSpacing:".14em",textTransform:"uppercase",fontWeight:700,marginBottom:8}}>Usados recentemente</p><div style={{display:"flex",flexWrap:"wrap",gap:6}}>{recent.map((m,i)=><button key={i} onClick={()=>{setTacoQ(m.nome.split(" (")[0]);setTimeout(searchTaco,50);}} style={{padding:"6px 12px",borderRadius:20,fontSize:11,border:"1.5px solid rgba(250,204,21,.2)",background:"rgba(250,204,21,.07)",color:C.yellow,cursor:"pointer",fontFamily:"inherit",fontWeight:600}}>{m.nome.split(" (")[0].slice(0,20)}</button>)}</div></div>);})()}
           <div style={{display:"flex",gap:8,marginBottom:14}}>
             <input value={tacoQ} onChange={e=>setTacoQ(e.target.value)} onKeyDown={e=>e.key==="Enter"&&searchTaco()} placeholder="Ex: frango, arroz, ovo..." style={{flex:1,background:"rgba(255,255,255,.05)",border:"1.5px solid rgba(255,255,255,.1)",borderRadius:12,padding:"13px 16px",color:"#fff",fontSize:14,outline:"none",fontFamily:"inherit"}}/>
             <Btn onClick={searchTaco} disabled={loadTaco} style={{flexShrink:0}}>{loadTaco?"...":"Buscar"}</Btn>
@@ -1623,10 +1636,26 @@ function Health({profile,weights,compositions,saudeDaily=[],onAddWeight,onAddCom
 }
 
 // JOURNEY
-function Journey({profile,weights,trainings}){
+function Journey({profile,weights,trainings,checkinSemanais=[]}){
   const lw=weights[0]?.peso||profile?.peso;
   const lost=Math.max(0,(profile?.peso||0)-(lw||0));
   const phase=lw>130?1:lw>120?2:lw>110?3:lw>100?4:lw>95?5:6;
+  const BADGES=[
+    {id:"first_tr",emoji:"🏋️",title:"Primeiro treino",desc:"Registrou o 1º treino",ok:trainings.length>=1},
+    {id:"first_swim",emoji:"🏊",title:"Primeiro mergulho",desc:"1ª sessão de natação",ok:trainings.some(t=>t.modalidade==="natacao")},
+    {id:"first_run",emoji:"🏃",title:"Primeira corrida",desc:"1ª sessão de corrida",ok:trainings.some(t=>t.modalidade==="corrida")},
+    {id:"first_bike",emoji:"🚴",title:"Ciclista iniciante",desc:"1ª sessão de bike",ok:trainings.some(t=>t.modalidade==="bike")},
+    {id:"tr10",emoji:"💪",title:"10 treinos",desc:"10 treinos realizados",ok:trainings.length>=10},
+    {id:"tr50",emoji:"⚡",title:"50 treinos",desc:"50 treinos realizados",ok:trainings.length>=50},
+    {id:"tr100",emoji:"🔥",title:"100 treinos",desc:"100 treinos realizados",ok:trainings.length>=100},
+    {id:"lost5",emoji:"⚖️",title:"5 kg perdidos",desc:"Perdeu 5 kg desde o início",ok:lost>=5},
+    {id:"lost10",emoji:"🎯",title:"10 kg perdidos",desc:"Perdeu 10 kg",ok:lost>=10},
+    {id:"lost20",emoji:"🌟",title:"20 kg perdidos",desc:"Perdeu 20 kg",ok:lost>=20},
+    {id:"ci5",emoji:"📊",title:"5 check-ins",desc:"5 check-ins semanais",ok:checkinSemanais.length>=5},
+    {id:"ci10",emoji:"📅",title:"Fiel ao check-in",desc:"10 check-ins semanais",ok:checkinSemanais.length>=10},
+  ];
+  const earned=BADGES.filter(b=>b.ok);
+  const locked=BADGES.filter(b=>!b.ok);
   const [planoFase,setPlanoFase]=useState("");
   const [loadPlanoFase,setLoadPlanoFase]=useState(false);
   const [faseExpandida,setFaseExpandida]=useState(null);
@@ -1651,6 +1680,28 @@ function Journey({profile,weights,trainings}){
           {[{v:`-${lost.toFixed(1)}kg`,l:"Perdidos",c:C.green},{v:trainings.length,l:"Treinos",c:C.yellow}].map((s,i)=><div key={i} style={{textAlign:"center"}}><p style={{fontFamily:"'Clash Display',sans-serif",fontSize:24,fontWeight:700,color:s.c}}>{s.v}</p><p style={{fontSize:9,color:C.dim,letterSpacing:".1em",textTransform:"uppercase"}}>{s.l}</p></div>)}
         </div>
       </div>
+      <SLbl>Conquistas</SLbl>
+      {earned.length>0&&(
+        <div style={{display:"flex",flexWrap:"wrap",gap:8,marginBottom:16}}>
+          {earned.map(b=>(
+            <div key={b.id} style={{background:"rgba(250,204,21,.1)",border:"1px solid rgba(250,204,21,.25)",borderRadius:14,padding:"10px 12px",display:"flex",alignItems:"center",gap:8,minWidth:120}}>
+              <span style={{fontSize:22}}>{b.emoji}</span>
+              <div><p style={{fontSize:11,fontWeight:700,color:C.yellow}}>{b.title}</p><p style={{fontSize:9,color:C.dim}}>{b.desc}</p></div>
+            </div>
+          ))}
+        </div>
+      )}
+      {earned.length===0&&<p style={{fontSize:12,color:C.dim,marginBottom:16,textAlign:"center"}}>Nenhuma conquista desbloqueada ainda. Continue treinando! 💪</p>}
+      {locked.length>0&&(
+        <div style={{display:"flex",flexWrap:"wrap",gap:6,marginBottom:20}}>
+          {locked.map(b=>(
+            <div key={b.id} style={{background:"rgba(255,255,255,.03)",border:"1px solid rgba(255,255,255,.06)",borderRadius:12,padding:"8px 10px",display:"flex",alignItems:"center",gap:6,opacity:0.4}}>
+              <span style={{fontSize:18,filter:"grayscale(1)"}}>{b.emoji}</span>
+              <p style={{fontSize:10,color:C.dim}}>{b.title}</p>
+            </div>
+          ))}
+        </div>
+      )}
       <SLbl>Linha do tempo</SLbl>
       <div style={{position:"relative"}}>
         <div style={{position:"absolute",left:20,top:0,bottom:0,width:2,background:"linear-gradient(to bottom,#facc15,rgba(250,204,21,.1))",zIndex:0}}/>
@@ -2193,11 +2244,11 @@ export default function App(){
   if(!profile)return<Onboarding onSave={async p=>{setProfile(p);await loadAll();}}/>;
 
   const pages={
-    home:<Dashboard profile={profile} meals={meals} weights={weights} checkins={checkins} habits={habits} trainings={trainings} onTab={setTab}/>,
+    home:<Dashboard profile={profile} meals={meals} weights={weights} checkins={checkins} habits={habits} trainings={trainings} onTab={setTab} saudeDaily={saudeDaily} checkinSemanais={checkinSemanais}/>,
     training:<Training profile={profile} trainings={trainings} onAdd={addTraining} onDelete={delTraining} onImport={importTrainings}/>,
     nutrition:<Nutrition profile={profile} meals={meals} onAdd={addMeal} onDelete={delMeal} customFoods={customFoods} onAddCustomFood={addCustomFood} onUpdateCustomFood={updateCustomFood} onDeleteCustomFood={delCustomFood}/>,
     health:<Health profile={profile} weights={weights} compositions={compositions} saudeDaily={saudeDaily} onAddWeight={addWeight} onAddComp={addComp} onDeleteWeight={delWeight} onImportSaude={importSaudeDaily}/>,
-    journey:<Journey profile={profile} weights={weights} trainings={trainings}/>,
+    journey:<Journey profile={profile} weights={weights} trainings={trainings} checkinSemanais={checkinSemanais}/>,
     habits:<Habits habits={habits} checkins={checkins} onToggle={toggleCI} onAdd={addHabit} onRemove={remHabit}/>,
     settings:<Settings profile={profile} onUpdateProfile={setProfile} onSyncNow={runHFSync} syncing={syncing} onSyncHealthNow={runHealthSync} syncingHealth={syncingHealth}/>,
   };
