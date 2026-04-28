@@ -230,10 +230,12 @@ function Dashboard({profile,meals,weights,checkins,habits,trainings,onTab,saudeD
   const [aguaMl,setAguaMl]=useState(()=>{const s=localStorage.getItem("agua_ml_"+todayStr());if(s)return parseInt(s);const cups=localStorage.getItem("agua_"+todayStr());return cups?parseInt(cups)*250:0;});
   const [aguaInputVal,setAguaInputVal]=useState("");
   const tk=todayStr(),tm=meals.filter(m=>m.data===tk);
-  const cal=tm.reduce((s,m)=>s+(m.calorias||0),0),prot=tm.reduce((s,m)=>s+(m.proteina||0),0);
+  const cal=Math.round(tm.reduce((s,m)=>s+(m.calorias||0),0)),prot=Math.round(tm.reduce((s,m)=>s+(m.proteina||0),0)*10)/10;
   const ctd=checkins.filter(c=>c.data===tk);
   const lvl=getLvl(profile.xp||0),xpB=XPL[lvl]||0,xpN=XPL[lvl+1]||20000;
-  const lw=weights[0]?.peso||profile.peso,lost=Math.max(0,(profile.peso||0)-(lw||0));
+  const lw=weights[0]?.peso||profile.peso;
+  const pesoBase=weights.length>0?Math.max(profile.peso||0,...weights.map(w=>w.peso)):profile.peso||0;
+  const lost=Math.max(0,pesoBase-(lw||0));
   const days=Math.max(1,Math.floor((new Date()-new Date(profile.data_criacao||tk))/86400000)+1);
   const week=Array.from({length:7},(_,i)=>{const d=new Date();d.setDate(d.getDate()-6+i);const k=localDate(d);return{k,dw:["D","S","T","Q","Q","S","S"][d.getDay()],cal:meals.filter(m=>m.data===k).reduce((s,m)=>s+(m.calorias||0),0),tr:trainings.some(t=>t.data===k),today:k===tk};});
   const treinouHoje=trainings.some(t=>t.data===tk);
@@ -317,13 +319,29 @@ function Dashboard({profile,meals,weights,checkins,habits,trainings,onTab,saudeD
           </div>
         </div>
       </div>
+      {/* HERO: PRONTIDÃO */}
       <div style={{padding:"0 20px",marginBottom:14}}>
-        <Card style={{padding:"12px 16px",borderLeft:`3px solid ${readColor}`}}>
-          <div style={{display:"flex",justifyContent:"space-between",alignItems:"center"}}>
-            <div><p style={{fontSize:9,color:C.dim,letterSpacing:".12em",textTransform:"uppercase",fontWeight:700,marginBottom:3}}>Prontidão hoje</p><p style={{fontFamily:"'Clash Display',sans-serif",fontSize:28,fontWeight:700,color:readColor,lineHeight:1}}>{readiness}<span style={{fontSize:11,color:C.muted,fontWeight:400,marginLeft:2}}>/100</span></p><p style={{fontSize:11,color:readColor,fontWeight:700,marginTop:3}}>{readLabel}</p></div>
-            <div style={{textAlign:"right",maxWidth:150}}><p style={{fontSize:9,color:C.dim,marginBottom:5,textTransform:"uppercase",letterSpacing:".1em",fontWeight:700}}>Sinais</p>{todayH?.hrv&&<p style={{fontSize:10,color:C.muted,marginBottom:2}}>HRV {todayH.hrv}ms {avgHrv?`(média ${avgHrv})`:""}</p>}{todayH?.fc_repouso&&<p style={{fontSize:10,color:C.muted,marginBottom:2}}>FC {todayH.fc_repouso}bpm</p>}{lastCI?.p3&&<p style={{fontSize:10,color:C.muted}}>Sono: {lastCI.p3.split(" ")[0]}</p>}</div>
+        <div style={{background:`linear-gradient(135deg,${readColor}12,${readColor}05)`,border:`1px solid ${readColor}30`,borderRadius:22,padding:"18px 20px",boxShadow:`0 4px 24px ${readColor}15`}}>
+          <div style={{display:"flex",alignItems:"center",gap:18}}>
+            <Ring value={readiness} max={100} size={80} sw={7} color={readColor}>
+              <span style={{fontFamily:"'Clash Display',sans-serif",fontSize:18,fontWeight:900,color:readColor,lineHeight:1}}>{readiness}</span>
+            </Ring>
+            <div style={{flex:1}}>
+              <p style={{fontSize:9,color:C.dim,letterSpacing:".14em",textTransform:"uppercase",fontWeight:700,marginBottom:4}}>Prontidão de hoje</p>
+              <p style={{fontFamily:"'Clash Display',sans-serif",fontSize:24,fontWeight:800,color:readColor,marginBottom:4}}>{readLabel}</p>
+              <div style={{display:"flex",gap:8,flexWrap:"wrap"}}>
+                {todayH?.hrv&&<span style={{fontSize:10,color:C.muted,background:"rgba(255,255,255,.06)",borderRadius:8,padding:"3px 8px"}}>❤️‍🔥 HRV {todayH.hrv}ms{avgHrv?` · média ${avgHrv}`:""}</span>}
+                {todayH?.fc_repouso&&<span style={{fontSize:10,color:C.muted,background:"rgba(255,255,255,.06)",borderRadius:8,padding:"3px 8px"}}>💗 FC {todayH.fc_repouso}bpm</span>}
+                {lastCI?.p3&&<span style={{fontSize:10,color:C.muted,background:"rgba(255,255,255,.06)",borderRadius:8,padding:"3px 8px"}}>💤 {lastCI.p3.split(" ")[0]}</span>}
+                {!todayH&&<span style={{fontSize:10,color:C.dim,fontStyle:"italic"}}>Importe Watch para ver dados reais</span>}
+              </div>
+            </div>
           </div>
-        </Card>
+          <div style={{marginTop:14,height:3,borderRadius:2,background:"rgba(255,255,255,.06)",overflow:"hidden"}}>
+            <div style={{height:"100%",width:`${readiness}%`,borderRadius:2,background:readColor,transition:"width 1s cubic-bezier(.4,0,.2,1)",boxShadow:`0 0 10px ${readColor}60`}}/>
+          </div>
+          <p style={{fontSize:9,color:C.dim,marginTop:8,textAlign:"center",letterSpacing:".08em"}}>Score = HRV + FC repouso + qualidade do sono + carga de treino</p>
+        </div>
       </div>
 
       {/* DAY PROGRESS */}
@@ -487,9 +505,23 @@ function Dashboard({profile,meals,weights,checkins,habits,trainings,onTab,saudeD
       {/* WEEKLY CHART */}
       <div style={{padding:"0 20px",marginBottom:14}}>
         <Card>
-          <SLbl>Semana — calorias & treinos</SLbl>
-          <div style={{display:"flex",gap:6,alignItems:"flex-end",height:54}}>
-            {week.map((d,i)=>{const pct=Math.min(1,d.cal/(profile.cal_meta||2800)),h=8+pct*40;return(<div key={i} style={{flex:1,display:"flex",flexDirection:"column",alignItems:"center",gap:4}}>{d.tr&&<div style={{width:5,height:5,borderRadius:"50%",background:C.green,marginBottom:1}}/>}<div style={{width:"100%",height:h,borderRadius:4,background:d.cal>(profile.cal_meta||2800)?"rgba(248,113,113,.4)":d.today?C.yellow:"rgba(250,204,21,.2)",boxShadow:d.today?"0 0 8px rgba(250,204,21,.35)":"none"}}/><span style={{fontSize:8,color:d.today?C.yellow:C.dim}}>{d.dw}</span></div>);})}
+          <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:10}}>
+            <p style={{fontSize:10,letterSpacing:".14em",textTransform:"uppercase",color:C.dim,fontWeight:700}}>Calorias esta semana</p>
+            <div style={{display:"flex",gap:10,alignItems:"center"}}>
+              <span style={{fontSize:9,color:C.dim}}>🟢 treino</span>
+              <span style={{fontSize:9,color:C.yellow}}>Meta: {profile.cal_meta||2800}kcal</span>
+            </div>
+          </div>
+          <div style={{display:"flex",gap:6,alignItems:"flex-end",height:60,position:"relative"}}>
+            <div style={{position:"absolute",top:"calc(100% - 40px - 8px)",left:0,right:0,height:1,borderTop:`1px dashed rgba(250,204,21,.2)`,pointerEvents:"none"}}/>
+            {week.map((d,i)=>{const pct=Math.min(1,d.cal/(profile.cal_meta||2800)),h=8+pct*44;return(<div key={i} style={{flex:1,display:"flex",flexDirection:"column",alignItems:"center",gap:3}}>
+              {d.tr&&<div style={{width:5,height:5,borderRadius:"50%",background:C.green}}/>}
+              <div style={{width:"100%",flex:1,display:"flex",alignItems:"flex-end"}}>
+                <div style={{width:"100%",height:h,borderRadius:4,background:d.cal>(profile.cal_meta||2800)?"rgba(248,113,113,.5)":d.today?C.yellow:"rgba(250,204,21,.2)",boxShadow:d.today?"0 0 8px rgba(250,204,21,.35)":"none"}} title={d.cal?`${d.cal}kcal`:"Sem refeição"}/>
+              </div>
+              <span style={{fontSize:8,color:d.today?C.yellow:C.dim}}>{d.dw}</span>
+              {d.cal>0&&<span style={{fontSize:7,color:C.dim}}>{d.cal>999?`${(d.cal/1000).toFixed(1)}k`:d.cal}</span>}
+            </div>);})}
           </div>
         </Card>
       </div>
@@ -817,10 +849,10 @@ function Nutrition({profile,meals,onAdd,onDelete,customFoods=[],onAddCustomFood,
 
   const tk=todayStr();
   const dayMeals=meals.filter(m=>m.data===selDate);
-  const cal=dayMeals.reduce((s,m)=>s+(m.calorias||0),0);
-  const prot=dayMeals.reduce((s,m)=>s+(m.proteina||0),0);
-  const carbs=dayMeals.reduce((s,m)=>s+(m.carbs||0),0);
-  const fat=dayMeals.reduce((s,m)=>s+(m.gordura||0),0);
+  const cal=Math.round(dayMeals.reduce((s,m)=>s+(m.calorias||0),0));
+  const prot=Math.round(dayMeals.reduce((s,m)=>s+(m.proteina||0),0)*10)/10;
+  const carbs=Math.round(dayMeals.reduce((s,m)=>s+(m.carbs||0),0)*10)/10;
+  const fat=Math.round(dayMeals.reduce((s,m)=>s+(m.gordura||0),0)*10)/10;
 
   const calDays=Array.from({length:35},(_,i)=>{
     const d=new Date();d.setDate(d.getDate()-34+i);
@@ -917,7 +949,7 @@ function Nutrition({profile,meals,onAdd,onDelete,customFoods=[],onAddCustomFood,
             <p style={{fontSize:13,fontWeight:700}}>{m.nome}</p>
             {mt&&<Badge color={mt.color} style={{fontSize:8}}>{mt.label}</Badge>}
           </div>
-          <p style={{fontSize:11,color:C.muted}}>{m.hora} · <span style={{color:C.yellow}}>{m.calorias}kcal</span> · <span style={{color:C.purple}}>{m.proteina}g prot</span></p>
+          <p style={{fontSize:11,color:C.muted}}>{m.hora} · <span style={{color:C.yellow}}>{Math.round(m.calorias||0)}kcal</span> · <span style={{color:C.purple}}>{(Math.round((m.proteina||0)*10)/10)}g prot</span></p>
           {mt&&<p style={{fontSize:10,color:C.dim,marginTop:2}}>{mt.label}{mt.horario?` · ${mt.horario}`:""}</p>}
         </div>
         <DelBtn onClick={()=>onDelete(m.id)}/>
@@ -1220,9 +1252,12 @@ function Health({profile,weights,compositions,saudeDaily=[],onAddWeight,onAddCom
   };
 
   const lw=weights[0]?.peso||profile?.peso;
-  const lost=Math.max(0,(profile?.peso||0)-(lw||0));
+  // pesoBase = maior valor entre peso do perfil e maior peso já registrado (para não mostrar -0.0)
+  const pesoBase=weights.length>0?Math.max(profile?.peso||0,...weights.map(w=>w.peso)):profile?.peso||0;
+  const lost=Math.max(0,pesoBase-(lw||0));
   const rem=Math.max(0,(lw||0)-(profile?.peso_meta||0));
-  const prog=profile?.peso&&profile?.peso_meta?Math.min(100,Math.round((lost/((profile.peso)-(profile.peso_meta)))*100)):0;
+  const rangeMeta=pesoBase-(profile?.peso_meta||0);
+  const prog=rangeMeta>0?Math.min(100,Math.round((lost/rangeMeta)*100)):0;
   const lastComp=compositions[0];
 
   const getInsight=async()=>{
@@ -1327,7 +1362,23 @@ function Health({profile,weights,compositions,saudeDaily=[],onAddWeight,onAddCom
           </div>
           {loadIns&&<Spin text="Dr. Musy analisando"/>}
           {insight&&!loadIns&&<Card style={{marginBottom:18,background:"rgba(74,222,128,.1)",border:"1px solid rgba(74,222,128,.2)"}}><p style={{fontSize:9,letterSpacing:".15em",textTransform:"uppercase",color:C.green,marginBottom:8,fontWeight:800}}>✦ Dr. Paulo Musy</p><p style={{fontSize:12,color:"rgba(255,255,255,.65)",lineHeight:1.7}}>{insight}</p></Card>}
-          {weights.length>1&&<><SLbl>Evolução</SLbl><Card style={{marginBottom:16}}><div style={{display:"flex",gap:4,alignItems:"flex-end",height:72}}>{weights.slice(0,20).reverse().map((p,i,arr)=>{const all=arr.map(x=>x.peso),min=Math.min(...all),max=Math.max(...all),range=max-min||1,h=12+((p.peso-min)/range)*54,last=i===arr.length-1;return<div key={i} style={{flex:1,height:h,borderRadius:4,background:last?C.yellow:`rgba(250,204,21,${.15+(i/arr.length)*.55})`,boxShadow:last?"0 0 8px rgba(250,204,21,.4)":"none"}} title={`${p.peso}kg`}/>;})}</div></Card></>}
+          <SLbl>Evolução</SLbl>
+          {weights.length<3?(
+            <Card style={{marginBottom:16,textAlign:"center",padding:"20px 16px",background:"rgba(250,204,21,.04)",border:"1px dashed rgba(250,204,21,.15)"}}>
+              <p style={{fontSize:22,marginBottom:8}}>📈</p>
+              <p style={{fontSize:13,fontWeight:700,color:C.yellow,marginBottom:4}}>{weights.length===0?"Registre seu primeiro peso":"Continue registrando!"}</p>
+              <p style={{fontSize:11,color:C.muted,lineHeight:1.6}}>{weights.length===0?"Precisamos de pelo menos 3 pesagens para mostrar a evolução.":weights.length===1?"Mais 2 pesagens e você verá sua curva de evolução.":"Mais 1 pesagem e o gráfico de evolução aparece!"}</p>
+            </Card>
+          ):(
+            <Card style={{marginBottom:16}}>
+              <div style={{display:"flex",gap:4,alignItems:"flex-end",height:72}}>
+                {weights.slice(0,20).reverse().map((p,i,arr)=>{const all=arr.map(x=>x.peso),min=Math.min(...all),max=Math.max(...all),range=max-min||1,h=12+((p.peso-min)/range)*54,last=i===arr.length-1;return<div key={i} style={{flex:1,height:h,borderRadius:4,background:last?C.yellow:`rgba(250,204,21,${.15+(i/arr.length)*.55})`,boxShadow:last?"0 0 8px rgba(250,204,21,.4)":"none"}} title={`${p.peso}kg · ${fmt(p.data)}`}/>;})}</div>
+              <div style={{display:"flex",justifyContent:"space-between",marginTop:6}}>
+                <span style={{fontSize:9,color:C.dim}}>{fmt(weights[Math.min(19,weights.length-1)].data)}</span>
+                <span style={{fontSize:9,color:C.yellow,fontWeight:700}}>{weights[0].peso}kg hoje</span>
+              </div>
+            </Card>
+          )}
           <SLbl>Histórico</SLbl>
           {weights.length===0?<div style={{textAlign:"center",padding:"24px 0",color:C.dim}}><p style={{fontSize:28,marginBottom:8}}>⚖️</p><p style={{fontSize:13}}>Registre seu peso diariamente</p></div>:
             weights.slice(0,30).map((p,i)=>{
@@ -1739,7 +1790,8 @@ function Health({profile,weights,compositions,saudeDaily=[],onAddWeight,onAddCom
 // JOURNEY
 function Journey({profile,weights,trainings,checkinSemanais=[],meals=[]}){
   const lw=weights[0]?.peso||profile?.peso;
-  const lost=Math.max(0,(profile?.peso||0)-(lw||0));
+  const pesoBase=weights.length>0?Math.max(profile?.peso||0,...weights.map(w=>w.peso)):profile?.peso||0;
+  const lost=Math.max(0,pesoBase-(lw||0));
   const phase=lw>130?1:lw>120?2:lw>110?3:lw>100?4:lw>95?5:6;
   const BADGES=[
     {id:"first_tr",emoji:"🏋️",title:"Primeiro treino",desc:"Registrou o 1º treino",ok:trainings.length>=1},
@@ -1887,7 +1939,7 @@ function Habits({habits,checkins,onToggle,onAdd,onRemove}){
               <div style={{width:28,height:28,borderRadius:9,border:done?`2px solid ${cat.color}`:"2px solid rgba(255,255,255,.1)",background:done?cat.color:"transparent",display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0,boxShadow:done?`0 0 12px ${cat.color}50`:"none"}}>{done&&<span style={{fontSize:13,color:"#000",fontWeight:900}}>✓</span>}</div>
               <span style={{fontSize:22,flexShrink:0}}>{h.emoji}</span>
               <div style={{flex:1}}><p style={{fontSize:13,fontWeight:700,color:done?"#fff":"rgba(255,255,255,.75)",textDecoration:done?"line-through":"none",textDecorationColor:"rgba(255,255,255,.25)"}}>{h.titulo}</p><Badge color={cat.color} style={{marginTop:4}}>{cat.label}</Badge></div>
-              <div style={{display:"flex",alignItems:"center",gap:8}}><span style={{fontSize:11,fontWeight:900,color:done?C.yellow:C.dim}}>+{h.xp}</span><DelBtn onClick={()=>onRemove(h.id)}/></div>
+              <div style={{display:"flex",alignItems:"center",gap:8}}><span style={{fontSize:11,fontWeight:900,color:done?C.yellow:C.dim}}>+{h.xp}</span><DelBtn onClick={()=>{if(window.confirm(`Remover hábito "${h.titulo}"? Isso apaga o histórico de check-ins.`))onRemove(h.id);}}/></div>
             </div>
           );
         })}
