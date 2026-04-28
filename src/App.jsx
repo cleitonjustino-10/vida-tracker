@@ -101,11 +101,10 @@ const TABS=[
   {id:"home",icon:"⚡",label:"Início"},
   {id:"training",icon:"🏋️",label:"Treino"},
   {id:"nutrition",icon:"🍽️",label:"Nutrição"},
+  {id:"habits",icon:"🔥",label:"Hábitos"},
   {id:"health",icon:"📊",label:"Saúde"},
-  {id:"mais",icon:"☰",label:"Mais"},
 ];
 const MAIS_ITEMS=[
-  {id:"habits",icon:"🔥",label:"Hábitos"},
   {id:"journey",icon:"🏆",label:"Jornada"},
   {id:"settings",icon:"⚙️",label:"Configurações"},
 ];
@@ -314,7 +313,7 @@ function Dashboard({profile,meals,weights,checkins,habits,trainings,onTab,saudeD
           <div style={{display:"flex",flexDirection:"column",alignItems:"center",background:"rgba(251,191,36,.08)",border:"1px solid rgba(251,191,36,.2)",borderRadius:14,padding:"8px 14px",gap:1,minWidth:52}}>
             <span style={{fontSize:18}}>🔥</span>
             <span style={{fontFamily:"'Clash Display',sans-serif",fontSize:20,fontWeight:700,color:C.yellow,lineHeight:1}}>{streak}</span>
-            <span style={{fontSize:9,color:C.dim,letterSpacing:".06em"}}>dias</span>
+            <span style={{fontSize:9,color:C.dim,letterSpacing:".06em"}}>sequência</span>
           </div>
         </div>
       </div>
@@ -332,8 +331,8 @@ function Dashboard({profile,meals,weights,checkins,habits,trainings,onTab,saudeD
         <div style={{background:C.card,borderRadius:20,padding:"16px 18px",boxShadow:"0 2px 8px rgba(0,0,0,.35)"}}>
           <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:10}}>
             <div>
-              <p style={{fontSize:13,fontWeight:700,marginBottom:2}}>Progresso do dia</p>
-              <p style={{fontSize:11,color:C.muted}}>{doneCt} de {checkItems.length} itens · Dia {days}</p>
+              <p style={{fontSize:13,fontWeight:700,marginBottom:2}}>Check-list de hoje</p>
+              <p style={{fontSize:11,color:C.muted}}>{doneCt} de {checkItems.length} tarefas concluídas</p>
             </div>
             <Ring value={doneCt} max={checkItems.length} size={52} sw={5} color={pctDay===100?C.green:C.yellow}>
               <span style={{fontSize:11,fontWeight:900,color:pctDay===100?C.green:C.yellow}}>{pctDay}%</span>
@@ -389,8 +388,9 @@ function Dashboard({profile,meals,weights,checkins,habits,trainings,onTab,saudeD
 
       {(()=>{const xpRestante=xpN-(profile.xp||0);const diasApp=Math.max(1,days);const xpPorDia=Math.round((profile.xp||0)/diasApp);const diasParaLvl=xpPorDia>0?Math.round(xpRestante/xpPorDia):null;const pctLvl=Math.round(((profile.xp||0)-xpB)/(xpN-xpB)*100);return(
         <div style={{padding:"0 20px",marginBottom:14}}>
+          <p style={{fontSize:10,letterSpacing:".16em",textTransform:"uppercase",color:C.dim,marginBottom:9,fontWeight:700}}>⚡ Evolução de nível — {LVLN[lvl]}</p>
           <div style={{display:"flex",gap:8,alignItems:"stretch"}}>
-            {[{emoji:LVLN[Math.max(0,lvl-1)]??"🌱",label:"Nível anterior",xp:XPL[Math.max(0,lvl-1)],done:true},{emoji:LVLN[lvl],label:"Atual",xp:profile.xp||0,cur:true},{emoji:LVLN[Math.min(LVLN.length-1,lvl+1)],label:"Próximo",xp:xpN,done:false}].map((n,i)=>(
+            {[{emoji:LVLN[Math.max(0,lvl-1)]??"🌱",label:"Anterior",xp:XPL[Math.max(0,lvl-1)],done:true},{emoji:LVLN[lvl],label:"Você agora",xp:profile.xp||0,cur:true},{emoji:LVLN[Math.min(LVLN.length-1,lvl+1)],label:"Próximo",xp:xpN,done:false}].map((n,i)=>(
               <Card key={i} style={{flex:1,padding:"10px 8px",textAlign:"center",border:n.cur?`1.5px solid rgba(250,204,21,.3)`:undefined,background:n.cur?"rgba(250,204,21,.04)":C.card}}>
                 <p style={{fontSize:9,color:n.cur?C.yellow:C.dim,marginBottom:4,fontWeight:n.cur?700:400,letterSpacing:".08em"}}>{n.label}</p>
                 <p style={{fontSize:11,fontWeight:700,color:n.cur?C.yellow:C.muted,marginBottom:2}}>{n.emoji}</p>
@@ -467,7 +467,7 @@ function Dashboard({profile,meals,weights,checkins,habits,trainings,onTab,saudeD
             <div>
               <p style={{fontSize:11,fontWeight:700,marginBottom:3,color:treinouHoje?C.green:C.blue}}>{treinouHoje?"⚡ Dia de treino":"😴 Dia de descanso"}</p>
               <p style={{fontSize:14,fontWeight:800,color:treinouHoje?C.green:C.blue}}>Meta: {calCiclo} kcal</p>
-              <p style={{fontSize:11,color:C.muted,marginTop:2}}>{treinouHoje?`+${calDiff} kcal para recuperação`:`-${calDiff} kcal déficit maior`}</p>
+              <p style={{fontSize:11,color:C.muted,marginTop:2}}>{treinouHoje?`+${calDiff} kcal extras para recuperação muscular`:`-${calDiff} kcal · déficit automático em dias sem treino`}</p>
             </div>
             <div style={{width:44,height:44,borderRadius:13,background:treinouHoje?"rgba(74,222,128,0.15)":"rgba(96,165,250,0.15)",display:"flex",alignItems:"center",justifyContent:"center",fontSize:22}}>{treinouHoje?"🏋️":"🛋️"}</div>
           </div>
@@ -635,7 +635,7 @@ function Training({profile,trainings,onAdd,onDelete,onImport}){
     <div style={{padding:"22px 18px",paddingBottom:170}}>
       <div style={{marginBottom:20}}><h2 style={{fontFamily:"'Clash Display',sans-serif",fontSize:26,fontWeight:700,marginBottom:4}}>Treinos 🏋️</h2><p style={{fontSize:12,color:C.muted}}>Musculação · Natação · Bike · Tênis · Corrida</p></div>
       <div style={{display:"flex",gap:8,marginBottom:10}}>
-        {[{v:weekCount,l:"Esta semana",c:C.yellow},{v:trainings.length,l:"Total",c:C.blue},{v:trainings.reduce((s,t)=>s+(t.duracao||0),0),l:"Minutos",c:C.green}].map((s,i)=>(
+        {[{v:weekCount,l:"Esta semana",c:C.yellow},{v:trainings.filter(t=>(new Date()-new Date(t.data+"T12:00:00"))<30*86400000).length,l:"Este mês",c:C.blue},{v:Math.round(trainings.reduce((s,t)=>s+(t.duracao||0),0)/60),l:"Horas",c:C.green}].map((s,i)=>(
           <Card key={i} style={{flex:1,padding:"12px 10px",textAlign:"center"}}><p style={{fontFamily:"'Clash Display',sans-serif",fontSize:22,fontWeight:700,color:s.c,marginBottom:3}}>{s.v}</p><p style={{fontSize:9,color:C.dim,letterSpacing:".1em",textTransform:"uppercase"}}>{s.l}</p></Card>
         ))}
       </div>
@@ -932,6 +932,10 @@ function Nutrition({profile,meals,onAdd,onDelete,customFoods=[],onAddCustomFood,
 
       {sub==="hoje"&&(
         <>
+          <div style={{display:"flex",gap:8,marginBottom:14}}>
+            <button onClick={()=>setSub("foto")} style={{flex:1,padding:"11px 8px",borderRadius:13,border:"1px solid rgba(250,204,21,.25)",background:"rgba(250,204,21,.07)",color:C.yellow,fontSize:12,fontWeight:700,cursor:"pointer",fontFamily:"inherit"}}>📸 Registrar por foto</button>
+            <button onClick={()=>setSub("taco")} style={{flex:1,padding:"11px 8px",borderRadius:13,border:"1px solid rgba(96,165,250,.25)",background:"rgba(96,165,250,.07)",color:C.blue,fontSize:12,fontWeight:700,cursor:"pointer",fontFamily:"inherit"}}>🇧🇷 Buscar TACO</button>
+          </div>
           <Card style={{marginBottom:14,background:"rgba(250,204,21,.03)",border:"1px solid rgba(250,204,21,.1)"}}>
             <SLbl>Macros — {fmt(selDate)}</SLbl>
             {[{l:"Calorias",v:cal,max:profile?.cal_meta||2800,c:C.yellow,u:"kcal"},{l:"Proteína",v:prot,max:profile?.prot_meta||336,c:C.purple,u:"g"},{l:"Carboidratos",v:carbs,max:profile?.carbs_meta||250,c:C.blue,u:"g"},{l:"Gordura",v:fat,max:profile?.gord_meta||70,c:C.orange,u:"g"}].map(m=>(
@@ -957,8 +961,7 @@ function Nutrition({profile,meals,onAdd,onDelete,customFoods=[],onAddCustomFood,
               })}
             </div>
           )}
-          <FIn label="Ver outro dia" type="date" value={selDate} onChange={v=>{setSelDate(v);setMealDate(v);}}/>
-          <SLbl mt={4}>Refeições — {fmt(selDate)}</SLbl>
+          <SLbl mt={4}>Refeições de hoje — {fmt(selDate)}</SLbl>
           {dayMeals.length===0?<div style={{textAlign:"center",padding:"24px 0",color:C.dim}}><p style={{fontSize:28,marginBottom:8}}>🍽️</p><p style={{fontSize:13}}>Nenhuma refeição neste dia</p><p style={{fontSize:11,marginTop:4}}>Use "TACO 🇧🇷" ou "Foto IA"</p></div>:
             MEAL_TYPES.map(t=>{const group=dayMeals.filter(m=>(m.tipo||m.tipo_refeicao)===t.id);if(!group.length)return null;return(<div key={t.id}><p style={{fontSize:10,letterSpacing:".15em",textTransform:"uppercase",color:t.color,marginTop:16,marginBottom:8,fontWeight:700}}>{t.label}{t.horario?` · ${t.horario}`:""}</p>{group.map(m=><MealCard key={m.id} m={m}/>)}</div>);})
           }
@@ -1171,6 +1174,15 @@ function Health({profile,weights,compositions,saudeDaily=[],onAddWeight,onAddCom
   const [loadIns,setLoadIns]=useState(false);
   const fileXiRef=useRef();
   const fileExRef=useRef();
+  const fileFrenteRef=useRef();
+  const fileVersoRef=useRef();
+  const [fotoFrente,setFotoFrente]=useState(null);
+  const [fotoVerso,setFotoVerso]=useState(null);
+  const [savingFotos,setSavingFotos]=useState(false);
+  const [fotoHistorico,setFotoHistorico]=useState(()=>{const all=[];for(let i=0;i<localStorage.length;i++){const k=localStorage.key(i);if(k&&k.startsWith("fotos_corporais_")){try{const d=JSON.parse(localStorage.getItem(k));all.push({data:k.replace("fotos_corporais_",""),...d});}catch{}}}return all.sort((a,b)=>b.data.localeCompare(a.data));});
+  const processBodyPhoto=(file,setSide)=>{if(!file)return;const r=new FileReader();r.onload=async(e)=>{const c=await compressImg(e.target.result,900);setSide(c);};r.readAsDataURL(file);};
+  const saveFotos=()=>{if(!fotoFrente&&!fotoVerso)return;setSavingFotos(true);const key="fotos_corporais_"+todayStr();const obj={frente:fotoFrente,verso:fotoVerso};localStorage.setItem(key,JSON.stringify(obj));setFotoHistorico(h=>[{data:todayStr(),...obj},...h.filter(x=>x.data!==todayStr())]);setFotoFrente(null);setFotoVerso(null);setSavingFotos(false);alert("Fotos salvas!");};
+
 
   const importHealthFromUrl=async()=>{
     setImportingHealth(true);setImportHealthResult(null);
@@ -1358,6 +1370,23 @@ function Health({profile,weights,compositions,saudeDaily=[],onAddWeight,onAddCom
         return(
           <>
             <input ref={csvHealthRef} type="file" accept=".csv" style={{display:"none"}} onChange={e=>importHealthFromFile(e.target.files[0])}/>
+            {(()=>{
+              let dec=null;
+              if(hrvHoje&&hrvAvg){const ratio=hrvHoje/hrvAvg;dec=ratio>=1.08?{label:"Treinar pesado hoje",color:C.green,icon:"🔥",reason:`HRV ${hrvHoje}ms (+${Math.round((ratio-1)*100)}% acima da média ${hrvAvg}ms)`}:ratio>=0.88?{label:"Treinar normalmente",color:C.yellow,icon:"✅",reason:`HRV ${hrvHoje}ms dentro da média (${hrvAvg}ms)`}:{label:"Treino leve ou descanso",color:C.orange,icon:"⚠️",reason:`HRV ${hrvHoje}ms abaixo da média (${hrvAvg}ms) — priori recuperação`};}
+              else if(fcHoje){dec=fcHoje<60?{label:"Ótima recuperação",color:C.green,icon:"💚",reason:`FC ${fcHoje}bpm — atlética`}:fcHoje<72?{label:"Recuperação normal",color:C.yellow,icon:"✅",reason:`FC ${fcHoje}bpm — adequada`}:{label:"Priorize descanso",color:C.orange,icon:"⚠️",reason:`FC ${fcHoje}bpm — coração ainda em esforço`};}
+              if(!dec)return null;
+              return(
+                <div style={{background:`${dec.color}10`,border:`1px solid ${dec.color}35`,borderRadius:16,padding:"14px 16px",marginBottom:16,borderLeft:`3px solid ${dec.color}`}}>
+                  <div style={{display:"flex",alignItems:"center",gap:10}}>
+                    <span style={{fontSize:22}}>{dec.icon}</span>
+                    <div>
+                      <p style={{fontSize:13,fontWeight:800,color:dec.color,marginBottom:3}}>{dec.label}</p>
+                      <p style={{fontSize:11,color:C.muted,lineHeight:1.5}}>{dec.reason}</p>
+                    </div>
+                  </div>
+                </div>
+              );
+            })()}
             <div style={{display:"flex",gap:8,marginBottom:16}}>
               <Btn onClick={()=>{setShowImportHealth(true);setImportHealthResult(null);}} variant="blue" full>📥 Importar histórico</Btn>
             </div>
@@ -1550,7 +1579,39 @@ function Health({profile,weights,compositions,saudeDaily=[],onAddWeight,onAddCom
             <p style={{fontSize:13,fontWeight:700,marginBottom:6}}>📏 Medidas Corporais</p>
             <p style={{fontSize:12,color:C.muted,lineHeight:1.7}}>Registre mensalmente. A balança mente durante recomposição — as medidas mostram a verdade.</p>
           </div>
-          <Btn onClick={()=>setShowMedidas(true)} full style={{marginBottom:20}}>+ Registrar medidas</Btn>
+          <div style={{display:"flex",gap:8,marginBottom:20}}>
+            <Btn onClick={()=>setShowMedidas(true)} full>📏 Registrar medidas</Btn>
+          </div>
+          {/* FOTO CORPORAL */}
+          <Card style={{marginBottom:18,background:"rgba(167,139,250,.05)",border:"1px solid rgba(167,139,250,.2)"}}>
+            <p style={{fontSize:10,letterSpacing:".16em",textTransform:"uppercase",color:C.purple,marginBottom:4,fontWeight:700}}>📸 Foto Corporal — {fmtFull(todayStr())}</p>
+            <p style={{fontSize:11,color:C.muted,marginBottom:14,lineHeight:1.5}}>Registre frente e verso mensalmente. A foto não mente — você vai ver a recomposição corporal que a balança não mostra.</p>
+            <input ref={fileFrenteRef} type="file" accept="image/*" capture="environment" style={{display:"none"}} onChange={e=>processBodyPhoto(e.target.files[0],setFotoFrente)}/>
+            <input ref={fileVersoRef} type="file" accept="image/*" capture="environment" style={{display:"none"}} onChange={e=>processBodyPhoto(e.target.files[0],setFotoVerso)}/>
+            <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:10,marginBottom:12}}>
+              {[{label:"Frente",foto:fotoFrente,ref:fileFrenteRef,setFoto:setFotoFrente},{label:"Verso",foto:fotoVerso,ref:fileVersoRef,setFoto:setFotoVerso}].map(side=>(
+                <div key={side.label} onClick={()=>side.ref.current?.click()} style={{aspectRatio:"3/4",borderRadius:14,border:`2px dashed ${side.foto?"rgba(167,139,250,.5)":"rgba(255,255,255,.12)"}`,background:side.foto?"transparent":"rgba(255,255,255,.03)",display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center",cursor:"pointer",overflow:"hidden",position:"relative"}}>
+                  {side.foto?(<><img src={side.foto} alt={side.label} style={{width:"100%",height:"100%",objectFit:"cover"}}/><div style={{position:"absolute",bottom:0,left:0,right:0,background:"rgba(0,0,0,.6)",padding:"6px",textAlign:"center"}}><p style={{fontSize:10,color:"#fff",fontWeight:700}}>{side.label} ✓</p></div></>):(<><span style={{fontSize:28,marginBottom:8}}>📷</span><p style={{fontSize:11,color:C.dim,fontWeight:700}}>{side.label}</p><p style={{fontSize:9,color:C.dim,marginTop:2}}>Toque para fotografar</p></>)}
+                </div>
+              ))}
+            </div>
+            {(fotoFrente||fotoVerso)&&<Btn onClick={saveFotos} disabled={savingFotos} full variant="purple">{savingFotos?"Salvando...":"💾 Salvar fotos de hoje"}</Btn>}
+          </Card>
+          {fotoHistorico.length>0&&(
+            <>
+              <SLbl>Histórico de fotos</SLbl>
+              {fotoHistorico.slice(0,6).map((f,i)=>(
+                <Card key={i} style={{marginBottom:10}}>
+                  <p style={{fontSize:12,fontWeight:700,color:C.muted,marginBottom:10}}>{fmtFull(f.data)}</p>
+                  <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:8}}>
+                    {f.frente&&<div><p style={{fontSize:9,color:C.dim,marginBottom:4,textAlign:"center"}}>FRENTE</p><img src={f.frente} alt="frente" style={{width:"100%",borderRadius:10,aspectRatio:"3/4",objectFit:"cover"}}/></div>}
+                    {f.verso&&<div><p style={{fontSize:9,color:C.dim,marginBottom:4,textAlign:"center"}}>VERSO</p><img src={f.verso} alt="verso" style={{width:"100%",borderRadius:10,aspectRatio:"3/4",objectFit:"cover"}}/></div>}
+                  </div>
+                </Card>
+              ))}
+            </>
+          )}
+
           {medidas.length>0&&(
             <>
               <SLbl>Última medição — {fmt(medidas[0].data)}</SLbl>
@@ -2380,15 +2441,18 @@ export default function App(){
       <div style={{position:"fixed",bottom:0,left:"50%",transform:"translateX(-50%)",width:"100%",maxWidth:520,background:"rgba(15,23,42,.97)",backdropFilter:"blur(24px)",borderTop:"1px solid rgba(255,255,255,0.05)",zIndex:100}}>
         <div style={{display:"flex",padding:`8px 2px max(20px,env(safe-area-inset-bottom,20px))`}}>
           {TABS.map(t=>{
-            const isMais=t.id==="mais";
-            const isActive=isMais?MAIS_ITEMS.some(m=>m.id===tab):tab===t.id;
+            const isActive=tab===t.id;
             return(
-              <button key={t.id} onClick={()=>isMais?setShowMais(v=>!v):setTab(t.id)} style={{flex:1,display:"flex",flexDirection:"column",alignItems:"center",gap:3,padding:"8px 2px",border:"none",cursor:"pointer",background:isActive?"rgba(250,204,21,.08)":"transparent",borderRadius:10,fontFamily:"inherit",transition:"all .2s",borderBottom:isActive?`2px solid ${C.yellow}`:"2px solid transparent"}}>
+              <button key={t.id} onClick={()=>setTab(t.id)} style={{flex:1,display:"flex",flexDirection:"column",alignItems:"center",gap:3,padding:"8px 2px",border:"none",cursor:"pointer",background:isActive?"rgba(250,204,21,.08)":"transparent",borderRadius:10,fontFamily:"inherit",transition:"all .2s",borderBottom:isActive?`2px solid ${C.yellow}`:"2px solid transparent"}}>
                 <span style={{fontSize:15}}>{t.icon}</span>
                 <span style={{fontSize:8,fontWeight:isActive?800:400,color:isActive?C.yellow:C.dim,letterSpacing:".03em"}}>{t.label}</span>
               </button>
             );
           })}
+          <button onClick={()=>setShowMais(v=>!v)} style={{flex:1,display:"flex",flexDirection:"column",alignItems:"center",gap:3,padding:"8px 2px",border:"none",cursor:"pointer",background:MAIS_ITEMS.some(m=>m.id===tab)?"rgba(250,204,21,.08)":"transparent",borderRadius:10,fontFamily:"inherit",transition:"all .2s",borderBottom:MAIS_ITEMS.some(m=>m.id===tab)?`2px solid ${C.yellow}`:"2px solid transparent"}}>
+            <span style={{fontSize:15}}>⚙️</span>
+            <span style={{fontSize:8,fontWeight:MAIS_ITEMS.some(m=>m.id===tab)?800:400,color:MAIS_ITEMS.some(m=>m.id===tab)?C.yellow:C.dim,letterSpacing:".03em"}}>Mais</span>
+          </button>
         </div>
       </div>
     </div>
